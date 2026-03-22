@@ -5,3 +5,6 @@ __pycache__
 
 # Learning (for tesing purposes)
 learning/
+
+# Databricks config
+.databrickscfg

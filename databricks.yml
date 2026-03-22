@@ -34,7 +34,7 @@ targets:
     default: true
     workspace:
       host: "https://adb-7405618723866487.7.azuredatabricks.net"
-      root_path: /Users/marlon.marin@dataknow.com/bundles/workflow-template
+      root_path: /Users/${workspace.current_user.userName}/bundles/${bundle.name}
 
     variables:
       availability: "ON_DEMAND_AZURE"
