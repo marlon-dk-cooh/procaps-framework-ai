@@ -1,0 +1,80 @@
+bundle:
+  name: procaps-framework-ai
+
+# include:
+#   - resources/indexing_workflow.yml
+
+sync:
+  include:
+    - databricks.yml
+    - resources/**
+    - config/**
+    - src/**
+
+variables:
+  availability:
+    description: "Cloud provider VM availability type"
+    default: "ON_DEMAND_AZURE"
+  node_type_id:
+    description: "VM instance type for the cluster"
+    default: "Standard_D4ds_v5"
+  num_workers:
+    description: "Number of worker nodes"
+    default: 1
+  autotermination_minutes:
+    description: "Minutes of inactivity before cluster terminates"
+    default: 5
+  spark_version:
+    description: "Databricks Runtime version"
+    default: "17.3.x-scala2.13"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: "https://adb-7405618723866487.7.azuredatabricks.net"
+      root_path: /Users/marlon.marin@dataknow.com/bundles/workflow-template
+
+    variables:
+      availability: "ON_DEMAND_AZURE"
+      node_type_id: "Standard_D4ds_v5"
+      num_workers: 1
+      autotermination_minutes: 5
+      spark_version: "17.3.x-scala2.13" 
+      
+resources:
+  jobs:
+    indexing_workflow_job:
+      name: "Procaps automatic indexing workflow [${bundle.target}]"
+
+      job_clusters:
+        - job_cluster_key: ia_cluster
+          new_cluster:
+            spark_version: ${var.spark_version}
+            node_type_id: ${var.node_type_id}
+            num_workers: ${var.num_workers}
+            autotermination_minutes: ${var.autotermination_minutes}
+            azure_attributes:
+              availability: ${var.availability}
+              first_on_demand: 1
+
+      tasks:
+        - task_key: s00_read_files
+          job_cluster_key: ia_cluster
+          notebook_task:
+            notebook_path: "./src/steps/s00_read_files.py"
+
+        - task_key: s01_extract_ocr
+          job_cluster_key: ia_cluster
+          depends_on:
+            - task_key: s00_read_files
+          notebook_task:
+            notebook_path: "./src/steps/s01_extract_ocr.py"
+
+        - task_key: s02_non_structured_data_processing
+          job_cluster_key: ia_cluster
+          depends_on:
+            - task_key: s01_extract_ocr
+          notebook_task:
+            notebook_path: "./src/steps/s02_non_structured_data_processing.py"
