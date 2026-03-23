@@ -2,25 +2,137 @@ import asyncio
 import json
 import logging
 from typing import Any, List, Optional
-from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence import DocumentIntelligenceClient
-from azure.storage.blob import BlobServiceClient
+from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
+from azure.core.credentials import AzureKeyCredential
+from azure.storage.filedatalake import DataLakeServiceClient
+from src.core.models import AnalyzedDocument
 
 logger = logging.getLogger(__name__)
 
 class DocumentIntelligenceConnection:
+    """Client for analyzing documents using Azure Document Intelligence.
+    
+    Extracts text, paragraphs, tables, and basic metadata from various document
+    formats (PDF, docx, xlsx, pptx, images).
+    """
+
     def __init__(self, endpoint: str, key: str):
         self.client = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
+        logger.info("DocumentIntelligenceConnection initialized.")
 
-    async def analyze_document(self, document: str, model: str) -> dict:
-        ...
+    def analyze_document_from_stream(
+        self, document: bytes, file_type: str, model: str = "prebuilt-read"
+    ) -> "AnalyzedDocument":
+        """Analyze a document from raw bytes.
 
-    async def analyze_document_from_url(self, document_url: str, model: str) -> dict:
-        ...
+        Args:
+            document: Raw file content bytes.
+            file_type: Original file extension (e.g., "pdf").
+            model: The DI model to use. Defaults to "prebuilt-read".
 
-    async def analyze_document_from_stream(self, document: bytes, model: str) -> dict:
-        ...
+        Returns:
+            An AnalyzedDocument holding the structured extraction results.
+        """
+        poller = self.client.begin_analyze_document(
+            model, AnalyzeDocumentRequest(bytes_source=document)
+        )
+        result = poller.result()
+        return self._build_result(result, file_type)
+
+    def analyze_document_from_url(
+        self, document_url: str, file_type: str, model: str = "prebuilt-read"
+    ) -> "AnalyzedDocument":
+        """Analyze a document from a public URL.
+
+        Args:
+            document_url: The public URL of the document.
+            file_type: Expected file extension (e.g., "pdf").
+            model: The DI model to use. Defaults to "prebuilt-read".
+
+        Returns:
+            An AnalyzedDocument holding the structured extraction results.
+        """        
+        poller = self.client.begin_analyze_document(
+            model, AnalyzeDocumentRequest(url_source=document_url)
+        )
+        result = poller.result()
+        return self._build_result(result, file_type)
+
+    def _build_result(self, result: Any, file_type: str) -> "AnalyzedDocument":
+        """Map the Azure SDK AnalyzeResult into our AnalyzedDocument dataclass."""
+
+        # Extract paragraphs safely
+        paragraphs = [p.content for p in result.paragraphs] if result.paragraphs else []
+        
+        # Extract tables safely (grid of cells)
+        tables_data = []
+        if result.tables:
+            for table in result.tables:
+                # Initialize grid for the table
+                row_count = table.row_count
+                col_count = table.column_count
+                grid = [["" for _ in range(col_count)] for _ in range(row_count)]
+                for cell in table.cells:
+                    grid[cell.row_index][cell.column_index] = cell.content
+                tables_data.append(grid)
+                
+        # Basic metadata
+        metadata = {
+            "model_id": getattr(result, "model_id", "unknown"),
+            "languages": [lang.locale for lang in (result.languages or [])],
+            # If downstream logic needs topic attributes, it can be injected here
+            "topic": None, 
+        }
+
+        return AnalyzedDocument(
+            content=result.content or "",
+            pages=len(result.pages) if result.pages else 0,
+            file_type=file_type,
+            paragraphs=paragraphs,
+            tables=tables_data,
+            metadata=metadata,
+        )
 
 class StorageAccount:
-    def __init__(self, endpoint: str, key: str):
-        self.client = BlobServiceClient(endpoint, AzureKeyCredential(key))
+
+    def __init__(self, account_name: str, account_key: str):
+        self._client = DataLakeServiceClient(f"https://{account_name}.dfs.core.windows.net", account_key)
+        logger.info("StorageAccount initialized for %s", account_name)
+
+    def list_files(self, container: str, directory: str = "/") -> List[str]:
+        """List file paths inside a directory of a container.
+
+        Args:
+            container: Name of the file system (container) in the storage account.
+            directory: Path of the directory to list. Defaults to root ``"/"``.
+
+        Returns:
+            A list of file paths (strings) found under the given directory.
+            Directories themselves are excluded from the result.
+        """
+        file_system_client = self._client.get_file_system_client(file_system=container)
+        paths = file_system_client.get_paths(path=directory)
+        return [
+            path.name
+            for path in paths
+            if not path.is_directory
+        ]
+
+    def read_file(self, container: str, file_path: str) -> bytes:
+        """Read the full content of a file as bytes.
+
+        Args:
+            container: Name of the file system (container).
+            file_path: Full path of the file inside the container
+                (e.g. ``"raw/invoices/invoice_001.pdf"``).
+
+        Returns:
+            The raw bytes of the file content.
+        """
+        file_system_client = self._client.get_file_system_client(file_system=container)
+        file_client = file_system_client.get_file_client(file_path)
+        download = file_client.download_file()
+        content = download.readall()
+        logger.info("Read %d bytes from %s/%s", len(content), container, file_path)
+        return content
