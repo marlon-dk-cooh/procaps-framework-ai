@@ -72,9 +72,9 @@ resources:
           notebook_task:
             notebook_path: "./src/steps/s01_extract_ocr.py"
 
-        - task_key: s02_non_structured_data_processing
-          job_cluster_key: ia_cluster
-          depends_on:
-            - task_key: s01_extract_ocr
-          notebook_task:
-            notebook_path: "./src/steps/s02_non_structured_data_processing.py"
+        # - task_key: s02_non_structured_data_processing
+        #   job_cluster_key: ia_cluster
+        #   depends_on:
+        #     - task_key: s01_extract_ocr
+        #   notebook_task:
+        #     notebook_path: "./src/steps/s02_non_structured_data_processing.py"

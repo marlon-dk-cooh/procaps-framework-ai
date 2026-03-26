@@ -2,27 +2,25 @@
 
 > **Pipeline inteligente de procesamiento de documentos para ProCaps** — impulsado por Azure AI Document Intelligence, Azure OpenAI y Databricks.
 
-Este proyecto implementa un **pipeline de orquestación basado en DAG** con una **arquitectura Hexagonal (Puertos y Adaptadores)** para ingestar, extraer y transformar documentos no estructurados (PDFs, imágenes, DOCX) en datos estructurados y consultables.
+Este proyecto implementa un **pipeline de orquestación basado en DAG** para ingestar, extraer y transformar documentos no estructurados (PDFs, imágenes, DOCX, XLSX) en datos estructurados y consultables, utilizando Azure AI Document Intelligence y Azure Data Lake Storage Gen2.
 
 ---
 
 ## 📐 Arquitectura
 
-El framework sigue un enfoque híbrido de **DAG + Arquitectura Hexagonal**:
-
-- **DAG (Grafo Acíclico Dirigido)**: Define el flujo de trabajo paso a paso, orquestado como un Job de Databricks.
-- **Hexagonal (Puertos y Adaptadores)**: Mantiene la lógica de negocio desacoplada de los servicios específicos de la nube, permitiendo pruebas agnósticas al proveedor y una separación limpia de responsabilidades.
+El framework sigue un enfoque de **pipeline DAG modular**, donde cada paso (`step`) es un notebook de Databricks que se encadena secuencialmente. La arquitectura no emplea puertos ni adaptadores hexagonales; en su lugar, prioriza una separación limpia entre **modelos de datos (core)**, **clientes de infraestructura** y **pasos del pipeline**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                       DATABRICKS JOB (DAG)                          │
-│          s00 (Read) ──▶ s01 (OCR/Extract) ──▶ s02 (Futuro)          │
+│        s00 (Read) ──▶ s01 (OCR/Extract) ──▶ s02 (Futuro)            │
 ├─────────────────────────────────────────────────────────────────────┤
-│         CAPA DE APLICACIÓN (Interfaces / Lógica de Negocio)         │
+│         CAPA CORE (Modelos de datos / Dataclasses)                   │
 ├─────────────────────────────────────────────────────────────────────┤
-│         CAPA DE INFRAESTRUCTURA (Adaptadores / Servicios Azure)     │
-│  - Unity Catalog (Volumes/Tables)    - Azure Doc Intelligence       │
-│  - Azure OpenAI (Embeddings)         - ADLS Gen2 (Bronze)           │
+│         CAPA DE INFRAESTRUCTURA (Clientes de Servicios Azure)       │
+│  - StorageAccount (ADLS Gen2)        - DocumentIntelligenceConnection│
+├─────────────────────────────────────────────────────────────────────┤
+│         UTILIDADES (Logger, LLM Client)                              │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -32,21 +30,26 @@ El framework sigue un enfoque híbrido de **DAG + Arquitectura Hexagonal**:
 
 ```
 procaps-framework-ai/
+├── config/
+│   ├── __init__.py
+│   └── settings.py                    # Configuración centralizada (pydantic-settings + .env)
 ├── src/
-│   ├── core/                          # Dominio / Lógica de negocio (puertos, interfaces)
+│   ├── core/
+│   │   └── models.py                  # Modelos de datos puros (ej. AnalyzedDocument)
 │   ├── infrastructure/
-│   │   ├── adapters/                  # Adaptadores de servicios Azure (DI, OpenAI, ADLS)
-│   │   ├── connections.py             # Conexiones de clientes API (Managed Identity)
-│   │   └── settings/
-│   │       └── settings.py            # Configuración del job y variables de entorno
-│   └── steps/
-│       ├── connections.py             # Helpers de conexión a nivel de step
-│       ├── s00_read_files.py          # Paso 0: Lectura de archivos desde el contenedor Bronze
-│       └── s01_extract_ocr.py         # Paso 1: Extracción OCR con Document Intelligence
+│   │   └── connections.py             # Clientes Azure: StorageAccount, DocumentIntelligenceConnection
+│   ├── steps/
+│   │   ├── s00_read_files.py          # Paso 0: Listado y clasificación de archivos desde ADLS
+│   │   ├── s01_extract_ocr.py         # Paso 1: Extracción OCR con Document Intelligence
+│   │   └── s02_non_structured_data_processing.py  # Paso 2: Procesamiento de datos no estructurados (futuro)
+│   └── utils/
+│       ├── app_logger.py              # Logger centralizado del proyecto
+│       └── llm_client.py              # Cliente LLM (Azure OpenAI vía LangChain)
+├── main.py                            # Punto de entrada local para orquestar los pasos del pipeline
 ├── config.json                        # Mapa de configuración para AI Search y CosmosDB
-├── databricks.yml                     # Configuración del asset bundle de Databricks
+├── databricks.yml                     # Definición del DAG y asset bundle de Databricks
 ├── pyproject.toml                     # Metadatos del proyecto y dependencias (uv)
-├── uv.lock                           # Archivo de bloqueo de dependencias
+├── uv.lock                            # Archivo de bloqueo de dependencias
 ├── .env                               # Variables de entorno (no se sube al repositorio)
 ├── .gitignore
 └── README.md

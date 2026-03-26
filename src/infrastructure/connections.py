@@ -97,7 +97,11 @@ class DocumentIntelligenceConnection:
 class StorageAccount:
 
     def __init__(self, account_name: str, account_key: str):
-        self._client = DataLakeServiceClient(f"https://{account_name}.dfs.core.windows.net", account_key)
+        self._client = DataLakeServiceClient(
+            account_url=f"https://{account_name}.dfs.core.windows.net", 
+            credential=account_key,
+            api_version="2026-02-06" # #TODO: Review this version.
+            )
         logger.info("StorageAccount initialized for %s", account_name)
 
     def list_files(self, container: str, directory: str = "/") -> List[str]:
@@ -120,12 +124,13 @@ class StorageAccount:
         ]
 
     def read_file(self, container: str, file_path: str) -> bytes:
-        """Read the full content of a file as bytes.
+        """
+        Lee el contenido completo de un archivo como bytes.
 
         Args:
-            container: Name of the file system (container).
-            file_path: Full path of the file inside the container
-                (e.g. ``"raw/invoices/invoice_001.pdf"``).
+            container: Nombre del sistema de archivos (contenedor).
+            file_path: Ruta completa del archivo dentro del contenedor
+                (ej. ``"raw/invoices/invoice_001.pdf"``).
 
         Returns:
             The raw bytes of the file content.
@@ -134,5 +139,28 @@ class StorageAccount:
         file_client = file_system_client.get_file_client(file_path)
         download = file_client.download_file()
         content = download.readall()
-        logger.info("Read %d bytes from %s/%s", len(content), container, file_path)
+        logger.info("Se leyeron %d bytes de %s/%s", len(content), container, file_path)
         return content
+
+    def write_file(self, container: str, output_path: str) -> None: # r
+        """
+        Escribe el procesamiento de un paso en una ruta especifica.
+
+        Args:
+            container: Nombre del sistema de archivos (contenedor).
+            output_path: Ruta del directorio de salida dentro del contenedor
+                (ej. ``"raw/invoices/"``).
+        """
+        file_system_client = self._client.get_file_system_client(file_system=container)
+        file_client = file_system_client.get_file_client(output_path)
+        if file_client.exists():
+            logger.info("El directorio %s ya existe, se omite la creación.", output_path)
+        else:
+            file_system_client.create_directory(output_path)
+            logger.info("Directorio %s creado correctamente.", output_path)
+        
+        
+
+            
+
+        
