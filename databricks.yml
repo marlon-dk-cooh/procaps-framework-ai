@@ -83,7 +83,7 @@ resources:
             - pypi:
                 package: "langchain-core>=1.2.21"
             - pypi:
-                package: "langchain-azure-ai[opentelemetry,tools]>=1.1.1"
+                package: "langchain-azure-ai>=1.1.1"
           notebook_task:
             notebook_path: "./src/steps/s00_read_files.py"
 

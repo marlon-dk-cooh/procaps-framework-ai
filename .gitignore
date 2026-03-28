@@ -2,6 +2,7 @@
 .env
 .venv
 __pycache__
+requirements.txt
 
 # Learning (for tesing purposes)
 learning/
