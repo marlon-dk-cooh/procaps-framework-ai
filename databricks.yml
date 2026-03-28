@@ -64,13 +64,26 @@ resources:
               availability: ${var.availability}
               first_on_demand: 1
 
-
       tasks:
         - task_key: s00_read_files
           job_cluster_key: ia_cluster
-          libraries:
+          libraries: &common_libraries
             - pypi:
-                package: "-r ${workspace.root_path}/requirements.txt"
+                package: "aiohttp>=3.13.3"
+            - pypi:
+                package: "azure-ai-documentintelligence>=1.0.2"
+            - pypi:
+                package: "azure-identity>=1.25.3"
+            - pypi:
+                package: "python-dotenv>=1.0.0"
+            - pypi:
+                package: "numpy>=2.4.3"
+            - pypi:
+                package: "pydantic-settings>=2.13.1"
+            - pypi:
+                package: "langchain-core>=1.2.21"
+            - pypi:
+                package: "langchain-azure-ai[opentelemetry,tools]>=1.1.1"
           notebook_task:
             notebook_path: "./src/steps/s00_read_files.py"
 
@@ -78,9 +91,7 @@ resources:
           job_cluster_key: ia_cluster
           depends_on:
             - task_key: s00_read_files
-          libraries:
-            - pypi:
-                package: "-r ${workspace.root_path}/requirements.txt"
+          libraries: *common_libraries
           notebook_task:
             notebook_path: "./src/steps/s01_extract_ocr.py"
 
