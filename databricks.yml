@@ -80,10 +80,6 @@ resources:
                 package: "numpy>=2.4.3"
             - pypi:
                 package: "pydantic-settings>=2.13.1"
-            - pypi:
-                package: "langchain-core>=1.2.21"
-            - pypi:
-                package: "langchain-azure-ai>=1.1.1"
           notebook_task:
             notebook_path: "./src/steps/s00_read_files.py"
 
