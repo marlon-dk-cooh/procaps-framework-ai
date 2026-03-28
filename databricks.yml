@@ -10,6 +10,7 @@ sync:
     - resources/**
     - config/**
     - src/**
+    - requirements.txt
 
 variables:
   availability:
@@ -67,6 +68,9 @@ resources:
       tasks:
         - task_key: s00_read_files
           job_cluster_key: ia_cluster
+          libraries:
+            - pypi:
+                package: "-r ${workspace.root_path}/requirements.txt"
           notebook_task:
             notebook_path: "./src/steps/s00_read_files.py"
 
@@ -74,6 +78,9 @@ resources:
           job_cluster_key: ia_cluster
           depends_on:
             - task_key: s00_read_files
+          libraries:
+            - pypi:
+                package: "-r ${workspace.root_path}/requirements.txt"
           notebook_task:
             notebook_path: "./src/steps/s01_extract_ocr.py"
 
