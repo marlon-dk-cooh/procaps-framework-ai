@@ -4,7 +4,7 @@ from typing import List, Dict
 from dataclasses import asdict
 
 from config.settings import settings
-from src.steps.s00_read_files import classify_file_by_extension
+from src.core.file_helpers import classify_file_by_extension
 from src.infrastructure.connections import StorageAccount, DocumentIntelligenceConnection
 from src.utils.app_logger import get_logger
 
