@@ -122,8 +122,12 @@ class StorageAccount:
             A list of file paths (strings) found under the given directory.
             Directories themselves are excluded from the result.
         """
-        file_system_client = self._client.get_file_system_client(file_system=container)
-        paths = file_system_client.get_paths(path=directory)
+        try:
+            file_system_client = self._client.get_file_system_client(file_system=container)
+            paths = file_system_client.get_paths(path=directory)
+        except Exception as e:
+            logger.error(f"Error al listar archivos en el contenedor {container}: {e}")
+            return []
         return [
             path.name
             for path in paths
@@ -142,11 +146,15 @@ class StorageAccount:
         Returns:
             The raw bytes of the file content.
         """
-        file_system_client = self._client.get_file_system_client(file_system=container)
-        file_client = file_system_client.get_file_client(file_path)
-        download = file_client.download_file()
-        content = download.readall()
-        logger.info("Se leyeron %d bytes de %s/%s", len(content), container, file_path)
+        try:
+            file_system_client = self._client.get_file_system_client(file_system=container)
+            file_client = file_system_client.get_file_client(file_path)
+            download = file_client.download_file()
+            content = download.readall()
+            logger.info("Se leyeron %d bytes de %s/%s", len(content), container, file_path)
+        except Exception as e:
+            logger.error(f"Error al leer el archivo {file_path} en el contenedor {container}: {e}")
+            return b""
         return content
 
     def write_file(self, container: str, output_path: str) -> None: # r
@@ -158,13 +166,16 @@ class StorageAccount:
             output_path: Ruta del directorio de salida dentro del contenedor
                 (ej. ``"raw/invoices/"``).
         """
-        file_system_client = self._client.get_file_system_client(file_system=container)
-        file_client = file_system_client.get_file_client(output_path)
-        if file_client.exists():
-            logger.info("El directorio %s ya existe, se omite la creación.", output_path)
-        else:
-            file_system_client.create_directory(output_path)
-            logger.info("Directorio %s creado correctamente.", output_path)
+        try:
+            file_system_client = self._client.get_file_system_client(file_system=container)
+            file_client = file_system_client.get_file_client(output_path)
+            if file_client.exists():
+                logger.info("El directorio %s ya existe, se omite la creación.", output_path)
+            else:
+                file_system_client.create_directory(output_path)
+                logger.info("Directorio %s creado correctamente.", output_path)
+        except Exception as e:
+            logger.error(f"Error al crear el directorio {output_path} en el contenedor {container}: {e}")
         
         
 

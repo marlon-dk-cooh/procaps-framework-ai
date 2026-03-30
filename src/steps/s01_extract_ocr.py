@@ -4,13 +4,13 @@ from typing import List, Dict
 from dataclasses import asdict
 
 from config.settings import settings
-from src.core.file_helpers import classify_file_by_extension
 from src.infrastructure.connections import StorageAccount, DocumentIntelligenceConnection
 from src.utils.app_logger import get_logger
+import src.core.file_helpers as helpers
 
 # ======== CARGA DE SETTINGS =============
 STEP_NAME = "s01_extract_ocr"
-logger = get_logger(STEP_NAME)
+logger = get_logger(helpers.STEP_NAME)
 
 
 def process_ocr_for_paths(paths: List[str]) -> Dict[str, str]:
