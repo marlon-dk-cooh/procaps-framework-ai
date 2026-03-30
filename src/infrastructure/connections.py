@@ -59,6 +59,14 @@ class DocumentIntelligenceConnection:
         result = poller.result()
         return self._build_result(result, file_type)
 
+    def count_pages(self, document: bytes, model: str = "prebuilt-read") -> int:
+        """Contar numero de paginas en un documento dado."""
+        poller = self.client.begin_analyze_document(
+            model, AnalyzeDocumentRequest(bytes_source=document)
+        )
+        result = poller.result()
+        return len(result.pages)
+
     def _build_result(self, result: Any, file_type: str) -> "AnalyzedDocument":
         """Map the Azure SDK AnalyzeResult into our AnalyzedDocument dataclass."""
 
@@ -77,11 +85,10 @@ class DocumentIntelligenceConnection:
                     grid[cell.row_index][cell.column_index] = cell.content
                 tables_data.append(grid)
                 
-        # Basic metadata
+        # #TODO: Asignar metadata.
         metadata = {
             "model_id": getattr(result, "model_id", "unknown"),
             "languages": [lang.locale for lang in (result.languages or [])],
-            # If downstream logic needs topic attributes, it can be injected here
             "topic": None, 
         }
 

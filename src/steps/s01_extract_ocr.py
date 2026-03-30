@@ -48,7 +48,7 @@ def process_ocr_for_paths(paths: List[str]) -> Dict[str, str]:
         group, ext = classify_file_by_extension(file_path)
         
         # Filtrar estrictamente solo imágenes, textuales o tabulares
-        if group not in ("textual", "images", "tabular"):
+        if group not in ("textual", "images"):
             logger.debug(f"Ignorando '{file_path}' (Grupo: {group}). No soportado nativamente para OCR.")
             continue
             
@@ -91,5 +91,8 @@ def process_ocr_for_paths(paths: List[str]) -> Dict[str, str]:
             
     return results_summary
 
+# #TODO: Does the file require document intelligence?
+# #TODO: Does the file exceed 2000 pages and we need to process it by batches?
+# #TODO: How is the file being read, is the model correct?
 
 

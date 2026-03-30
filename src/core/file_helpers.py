@@ -1,6 +1,7 @@
 """Utilidades para clasificación y agrupación de archivos por extensión."""
 from typing import Tuple
 from collections import defaultdict
+import re
 
 FILE_GROUPS = {
     "textual" : ["pdf", "docx", "txt", "pptx"],
@@ -48,3 +49,53 @@ def group_files_by_extension(paths: list[str]) -> dict[str, list[str]]:
         group, _ = classify_file_by_extension(path)
         grouped_paths[group].append(path)
     return dict(grouped_paths)
+
+def proportion_by_file_group(paths: list[str], return_pct: bool = False) -> dict[str, float]:
+    """
+    Calcula el porcentaje de archivos por grupo de extensión.
+    
+    Args:
+        paths = lista de rutas de archivos
+            Ej: ['bronze/raw/document.pdf', 'bronze/raw/image.png']
+
+    Returns:
+        dict[str, float] = diccionario con porcentajes por grupo de extensión
+            Ej: {'textual': 50.0, 'images': 50.0}
+    """
+    grouped_paths = group_files_by_extension(paths)
+    len_group = {x:len(y) for x,y in grouped_paths.items()}
+    if return_pct:
+        total_files = len(paths)
+        return {x: (y/total_files)*100 for x,y in len_group.items()}
+    return len_group
+
+def ext_in_others(grouped_path: dict[str, list[str]], export_json: bool = False, export_path: str = None) -> dict[str, list[int]]:
+    """
+    Realiza un resumen del tipo de extensiones clasificadas como 'otras'.
+
+    Args:
+        grouped_path = Grupo de archivos clasificados por extensión que viene de `group_files_by_extension`
+            Ej: {'textual': ['bronze/raw/document.pdf'], 'images': ['bronze/raw/image.png']}
+    Returns:
+        dict[str, list[str]] = diccionario con extensiones y cantidad de ellas.
+            Ej: {'.delta' : 45, '.dll' : 21, ...}
+    """
+    # Expresión regular para buscar una extensión alfabética/numérica al final de la ruta
+    # p. ej. .AAZZDF99Z, .pdf, .txt, .123, etc.
+    long_ext = r"\.([a-zA-Z0-9]+)$"
+
+    # Dict
+    ext_details = defaultdict(int)
+    if "other" in grouped_path:
+        for file_path in grouped_path["other"]:
+            match = re.search(long_ext, file_path)
+            if match:
+                ext_details["sap_metadata"] += 1
+            else:
+                ext_details["no_extension"] +=1
+
+    if export_json and export_path:
+        with open(export_path, 'w') as f:
+            json.dump(dict(ext_details), f, indent=4)
+                
+    return dict(ext_details)
