@@ -13,7 +13,7 @@ import json
 # ======== CARGA DE SETTINGS =============
 STEP_NAME = "s00_read_files"
 
-# ======== LOGICA PRINCIPAL ======
+# ======== LOGICA PRINCIPAL ==============
 def main(container: str, directory: str, **kwargs):
     # Logs
     logger = get_logger(STEP_NAME)
@@ -69,14 +69,4 @@ if __name__ == "__main__":
             extension_in_others_class="output.json", 
             len_per_group_extension="len_per_group.json", 
             grouped_extension="grouped_paths.json"
-    )
-
-    # Archivos utiles para POC.
-    main(
-        container="bronce-rag", 
-        directory="/",
-        output_path="./azpocdk_rag", 
-        extension_in_others_class="output.json", 
-        len_per_group_extension="len_per_group.json", 
-        grouped_extension="grouped_paths.json"
     )
