@@ -9,3 +9,7 @@ learning/
 
 # Databricks config
 .databrickscfg
+
+# Output files
+*.csv
+*.json

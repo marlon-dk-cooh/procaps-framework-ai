@@ -69,7 +69,51 @@ def proportion_by_file_group(paths: list[str], return_pct: bool = False) -> dict
         return {x: (y/total_files)*100 for x,y in len_group.items()}
     return len_group
 
-def ext_in_others(grouped_path: dict[str, list[str]], export_json: bool = False, export_path: str = None) -> dict[str, list[int]]:
+def ext_in_structured(
+    grouped_path: dict[str, list[str]], 
+    export_json: bool = False, 
+    export_path: str = None
+) -> dict[str, list[int]]:
+    """
+    Realiza un resumen del tipo de extensiones clasificadas como 'structured'.
+    
+    Args:
+        grouped_path = Grupo de archivos clasificados por extensión que viene de `group_files_by_extension`
+            Ej: {'textual': ['bronze/raw/document.pdf'], 'images': ['bronze/raw/image.png']}
+    Returns:
+        dict[str, int] = diccionario con extensiones y cantidad de ellas.
+            Ej: {'.delta' : 45, '.dll' : 21, ...}
+    """
+    # Expresión regular para buscar una extensión alfabética/numérica al final de la ruta
+    # p. ej. .json, .parquet, .delta.
+    json = r"\.json$"
+    parquet = r"\.parquet$"
+    delta = r"\.delta$"
+
+    # Dict
+    ext_details = defaultdict(int)
+    if "structured" in grouped_path:
+        for file_path in grouped_path["structured"]:
+            if re.search(json, file_path):
+                ext_details["json"] += 1
+            elif re.search(parquet, file_path):
+                ext_details["parquet"] += 1
+            elif re.search(delta, file_path):
+                ext_details["delta"] += 1
+            else:
+                ext_details["other_structured"] +=1
+
+    if export_json and export_path:
+        with open(export_path, 'w') as f:
+            json.dump(dict(ext_details), f, indent=4)
+                
+    return dict(ext_details)
+
+def ext_in_others(
+    grouped_path: dict[str, list[str]], 
+    export_json: bool = False, 
+    export_path: str = None
+) -> dict[str, list[int]]:
     """
     Realiza un resumen del tipo de extensiones clasificadas como 'otras'.
 

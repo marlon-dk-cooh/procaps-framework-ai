@@ -134,7 +134,7 @@ class StorageAccount:
             if not path.is_directory
         ]
 
-    def read_file(self, container: str, file_path: str) -> bytes:
+    def read_file(self, container: str, file_path: str, timeout: int = 30) -> bytes:
         """
         Lee el contenido completo de un archivo como bytes.
 
@@ -142,6 +142,7 @@ class StorageAccount:
             container: Nombre del sistema de archivos (contenedor).
             file_path: Ruta completa del archivo dentro del contenedor
                 (ej. ``"raw/invoices/invoice_001.pdf"``).
+            timeout: Tiempo máximo en segundos para la descarga. Default: 30s.
 
         Returns:
             The raw bytes of the file content.
@@ -149,13 +150,33 @@ class StorageAccount:
         try:
             file_system_client = self._client.get_file_system_client(file_system=container)
             file_client = file_system_client.get_file_client(file_path)
-            download = file_client.download_file()
+            download = file_client.download_file(timeout=timeout)
             content = download.readall()
             logger.info("Se leyeron %d bytes de %s/%s", len(content), container, file_path)
         except Exception as e:
             logger.error(f"Error al leer el archivo {file_path} en el contenedor {container}: {e}")
             return b""
         return content
+
+    def get_file_size(self, container: str, file_path: str) -> int:
+        """
+        Obtiene el tamaño de un archivo en bytes sin descargarlo.
+
+        Args:
+            container: Nombre del sistema de archivos (contenedor).
+            file_path: Ruta completa del archivo dentro del contenedor.
+
+        Returns:
+            El tamaño del archivo en bytes. Devuelve 0 si hay un error.
+        """
+        try:
+            file_system_client = self._client.get_file_system_client(file_system=container)
+            file_client = file_system_client.get_file_client(file_path)
+            properties = file_client.get_file_properties()
+            return properties.size
+        except Exception as e:
+            logger.error(f"Error al obtener tamaño del archivo {file_path} en contenedor {container}: {e}")
+            return 0
 
     def write_file(self, container: str, output_path: str) -> None: # r
         """
