@@ -48,10 +48,6 @@ def main(container: str, directory: str, **kwargs):
     # Porcentaje de archivos por grupo
     percent_group = proportion_by_file_group(paths)
 
-    # Sorting de archivos por tamaño
-    sorted_paths = sorted([int(re.search(r"\d+", file_sizes[file_path]).group()) for file_path in paths])
-    logger.info(f"Archivos ordenados por tamaño: {sorted_paths}")
-
     # Extensiones en la categoria de "structured", segun la clasificacion en FILE_GROUPS.
     ext_struc_paths = ext_in_structured(grouped_paths)
 

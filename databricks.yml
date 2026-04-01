@@ -34,7 +34,7 @@ targets:
     mode: development
     default: true
     workspace:
-      host: "https://adb-7405618723866487.7.azuredatabricks.net"
+      host: "https://adb-7020982738702124.4.azuredatabricks.net"
       root_path: /Users/${workspace.current_user.userName}/bundles/${bundle.name}
 
     variables:
@@ -65,7 +65,7 @@ resources:
               first_on_demand: 1
 
       tasks:
-        - task_key: s00_read_files
+        - task_key: s00_load_files
           job_cluster_key: ia_cluster
           libraries: &common_libraries
             - pypi:
@@ -81,12 +81,12 @@ resources:
             - pypi:
                 package: "pydantic-settings>=2.13.1"
           notebook_task:
-            notebook_path: "./src/steps/s00_read_files.py"
+            notebook_path: "./src/steps/s00_load_files.py"
 
         - task_key: s01_extract_ocr
           job_cluster_key: ia_cluster
           depends_on:
-            - task_key: s00_read_files
+            - task_key: s00_load_files
           libraries: *common_libraries
           notebook_task:
             notebook_path: "./src/steps/s01_extract_ocr.py"
