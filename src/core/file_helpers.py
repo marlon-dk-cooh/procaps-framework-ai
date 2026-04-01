@@ -1,7 +1,7 @@
 """Utilidades para clasificación y agrupación de archivos por extensión."""
 from typing import Tuple
 from collections import defaultdict
-import re
+import re, json
 
 FILE_GROUPS = {
     "textual" : ["pdf", "docx", "txt", "pptx"],
@@ -143,3 +143,35 @@ def ext_in_others(
             json.dump(dict(ext_details), f, indent=4)
                 
     return dict(ext_details)
+
+
+def filter_by_size(
+    paths: list[str],
+    size_limit: float,
+    sizes_path: str = "./azpocdk/file_sizes.json",
+) -> list[str]:
+    """Filtra una lista de rutas de archivos por tamaño máximo en kB.
+
+    Lee el ``file_sizes.json`` pre-calculado (generado por
+    ``s00_load_files``) y devuelve solo las rutas cuyos tamaños son iguales o
+    menores a ``size_limit``. Esto evita descargar los archivos solo para
+    verificar su tamaño.
+
+    Args:
+        paths: Lista de rutas relativas a filtrar.
+        size_limit: Tamaño máximo permitido en kilobytes (kB).
+        sizes_path: Ruta al JSON de metadatos de tamaños.
+            Default: ``"./azpocdk/file_sizes.json"``.
+
+    Returns:
+        Sub-lista de ``paths`` cuyos archivos cumplen con el límite.
+    """
+    with open(sizes_path, "r") as f:
+        sizes: dict = json.load(f)
+
+    allowed = {
+        path
+        for path, value in sizes.items()
+        if float(value.split()[0]) <= size_limit
+    }
+    return [p for p in paths if p in allowed]

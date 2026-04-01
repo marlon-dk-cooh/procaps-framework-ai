@@ -1,14 +1,127 @@
 import asyncio
 import json
-import logging
+import os
 from typing import Any, List, Optional
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
 from azure.core.credentials import AzureKeyCredential
 from azure.storage.filedatalake import DataLakeServiceClient
 from src.core.models import AnalyzedDocument
+from src.utils.app_logger import configure_logging, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+class MountPoint:
+    """Acceso a archivos en punto de montura.
+    Args:
+        root: Ruta raíz del mount point.
+            Ej. ``"/mnt/bronce"`` o ``"./data"``.
+    """
+
+    def __init__(self, root: str):
+        self.root = root
+        logger.info("Punto de montura inicializado en: %s", self.root)
+
+    def get_path(self, path: str) -> str:
+        """Construye la ruta absoluta combinando root + path relativo.
+
+        Args:
+            path: Ruta relativa dentro del mount point.
+
+        Returns:
+            Ruta absoluta como string.
+        """
+        return os.path.join(self.root, path)
+
+    def list_files(self, directory: str = "") -> List[str]:
+        """Lista recursivamente todos los archivos bajo un directorio.
+
+        Equivalente a ``StorageAccount.list_files``, pero opera sobre el
+        sistema de archivos local usando ``os.walk``.
+
+        Args:
+            directory: Sub-ruta relativa al root. Usa ``""`` para listar
+                desde la raíz del mount point.
+
+        Returns:
+            Lista de rutas relativas al root de los archivos encontrados.
+            Los directorios son excluidos del resultado.
+        """
+        base = self.get_path(directory)
+        paths: List[str] = []
+        try:
+            for dirpath, _, filenames in os.walk(base):
+                for filename in filenames:
+                    abs_path = os.path.join(dirpath, filename)
+                    rel_path = os.path.relpath(abs_path, self.root)
+                    paths.append(rel_path)
+        except Exception as e:
+            logger.error("Error al listar archivos en %s: %s", base, e)
+        return paths
+
+    def read_file(self, file_path: str) -> bytes:
+        """Lee el contenido completo de un archivo como bytes.
+
+        Equivalente a ``StorageAccount.read_file``, pero usa ``open()``
+        en lugar del SDK de Azure.
+
+        Args:
+            file_path: Ruta relativa al root del archivo a leer.
+                Ej. ``"raw/invoices/invoice_001.pdf"``.
+
+        Returns:
+            Contenido crudo del archivo como ``bytes``.
+            Devuelve ``b""`` si hay un error.
+        """
+        abs_path = self.get_path(file_path)
+        try:
+            with open(abs_path, "rb") as f:
+                content = f.read()
+            logger.info("Se leyeron %d bytes de %s", len(content), abs_path)
+            return content
+        except Exception as e:
+            logger.error("Error al leer el archivo %s: %s", abs_path, e)
+            return b""
+
+    def get_file_size(self, file_path: str) -> float:
+        """Obtiene el tamaño de un archivo en kilobytes (kB) sin leerlo.
+
+        Equivalente a ``StorageAccount.get_file_size``.
+
+        Args:
+            file_path: Ruta relativa al root del archivo.
+
+        Returns:
+            Tamaño en kB. Devuelve ``0.0`` si hay un error.
+        """
+        abs_path = self.get_path(file_path)
+        try:
+            return os.path.getsize(abs_path) / 1024
+        except Exception as e:
+            logger.error(
+                "Error al obtener tamaño del archivo %s: %s", abs_path, e
+            )
+            return 0.0
+
+    def write_file(self, output_path: str, content: bytes = b"") -> None:
+        """Escribe bytes en una ruta dada, creando directorios si no existen.
+
+        Equivalente a ``StorageAccount.write_file``, pero opera localmente.
+
+        Args:
+            output_path: Ruta relativa al root donde se escribirá el archivo.
+                Ej. ``"processed/results/output.json"``.
+            content: Contenido en bytes a escribir. Default: ``b""``.
+        """
+        abs_path = self.get_path(output_path)
+        try:
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            with open(abs_path, "wb") as f:
+                f.write(content)
+            logger.info("Archivo escrito correctamente en %s", abs_path)
+        except Exception as e:
+            logger.error("Error al escribir el archivo %s: %s", abs_path, e)
+
 
 class DocumentIntelligenceConnection:
     """Client for analyzing documents using Azure Document Intelligence.

@@ -1,9 +1,10 @@
 # Databricks notebook source
 from src.infrastructure.connections import StorageAccount
 from src.utils.app_logger import get_logger, configure_logging
+from src.core.file_helpers import filter_by_size
 from config.settings import settings
 import pandas as pd
-import concurrent.futures, json, re, io
+import concurrent.futures, json, re, io, sys
 
 # ========== CARGA DE SETTINGS ===========
 STEP_NAME = "s02_structured_data_processing"
@@ -19,22 +20,22 @@ with open("./azpocdk/grouped_paths.json", "r") as f:
 
 # ========== LOGICA PRINCIPAL ==============
 
-def load_parquet_files(timeout: int, **kwargs):
-
-    logger = get_logger(STEP_NAME)
+def load_parquet_files(timeout: int, container: str = "bronze", size_limit: int = None, **kwargs):
+    """Carga archivos parquet desde el Storage Account."""
+    func_name = sys._getframe().f_code.co_name
+    logger = get_logger(f"{STEP_NAME}.{func_name}")
     logger.info(f" --- Iniciando paso: {STEP_NAME} ---")
     parquet_collection = []
 
-    if kwargs["sorted_by_size"] and kwargs['limit']:
-        logger.info(f"⌚ Cargando los primeros {kwargs['limit']} archivos parquet ordenados por tamaño.")
-        data["structured"] = sorted(data["structured"][:kwargs["limit"]], key=lambda x: st_account.get_file_size(container="bronce", file_path=x))
-        logger.info("✅ Archivos ordenados por tamaño.")
+    if size_limit:
+        data["structured"] = filter_by_size(data["structured"], size_limit)
+        logger.info(f"✅ Se seleccionaron {len(data['structured'])} archivos para procesar.")
 
     for file in data["structured"]:
         if re.search(parquet, file, re.I):
             logger.info(f"👁️ Leyendo archivo: {file}")
             from_asdl = st_account.read_file(
-                container="bronce", file_path=file, timeout=timeout
+                container=container, file_path=file, timeout=timeout
             )
             if not from_asdl:
                 logger.warning(f"⏳ Archivo vacío o timeout al leer '{file}'. Saltando...")
@@ -46,16 +47,22 @@ def load_parquet_files(timeout: int, **kwargs):
 
     return parquet_collection
 
-def load_json_files(timeout: int, **kwargs):
-    logger = get_logger(STEP_NAME)
+def load_json_files(timeout: int, container: str = "bronze", size_limit: int = None, **kwargs):
+    """Carga archivos json desde el Storage Account."""
+    func_name = sys._getframe().f_code.co_name
+    logger = get_logger(f"{STEP_NAME}.{func_name}")
     logger.info(f" --- Iniciando paso: {STEP_NAME} ---")
     json_collection = []
+
+    if size_limit:
+        data["structured"] = filter_by_size(data["structured"], size_limit)
+        logger.info(f"✅ Se seleccionaron {len(data['structured'])} archivos para procesar.")
 
     for file in data["structured"]:
         if re.search(json_re, file, re.I):
             logger.info(f"👁️ Leyendo archivo: {file}")
             from_asdl = st_account.read_file(
-                container="bronce", file_path=file, timeout=timeout
+                container=container, file_path=file, timeout=timeout
             )
             if not from_asdl:
                 logger.warning(f"⏳ Archivo vacío o timeout al leer '{file}'. Saltando...")
@@ -69,7 +76,9 @@ def load_json_files(timeout: int, **kwargs):
 
 if __name__ == "__main__":
     configure_logging()
-    parquet_collection = load_parquet_files(timeout=60, limit=50, sorted_by_size=True)
+    # Limite de 5 MB
+    size_limit = 5000
+    parquet_collection = load_parquet_files(timeout=60, size_limit=size_limit)
 
     # Leer todos los archivos parquet de la colección y concatenarlos en un solo DataFrame.
     df = pd.concat([pd.read_parquet(f) for f in parquet_collection], ignore_index=True)

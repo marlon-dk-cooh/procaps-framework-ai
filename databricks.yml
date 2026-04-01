@@ -50,7 +50,7 @@ resources:
       name: "Procaps automatic indexing workflow [${bundle.target}]"
 
       permissions:
-        - service_principal_name: "cf22fa49-0ffd-49dc-97c2-e8c87006b1fc"
+        - service_principal_name: "50d36df7-3ffa-45bd-bfa8-0520d15f2c9b"
           level: CAN_MANAGE
           
       job_clusters:
