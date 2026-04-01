@@ -158,25 +158,25 @@ class StorageAccount:
             return b""
         return content
 
-    def get_file_size(self, container: str, file_path: str) -> int:
+    def get_file_size(self, container: str, file_path: str) -> float:
         """
-        Obtiene el tamaño de un archivo en bytes sin descargarlo.
+        Obtiene el tamaño de un archivo en kilobytes (kB) sin descargarlo.
 
         Args:
             container: Nombre del sistema de archivos (contenedor).
             file_path: Ruta completa del archivo dentro del contenedor.
 
         Returns:
-            El tamaño del archivo en bytes. Devuelve 0 si hay un error.
+            El tamaño del archivo en kB. Devuelve 0.0 si hay un error.
         """
         try:
             file_system_client = self._client.get_file_system_client(file_system=container)
             file_client = file_system_client.get_file_client(file_path)
             properties = file_client.get_file_properties()
-            return properties.size
+            return properties.size / 1024
         except Exception as e:
             logger.error(f"Error al obtener tamaño del archivo {file_path} en contenedor {container}: {e}")
-            return 0
+            return 0.0
 
     def write_file(self, container: str, output_path: str) -> None: # r
         """

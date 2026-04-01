@@ -13,4 +13,5 @@ dependencies = [
     "pydantic-settings>=2.13.1",
     "langchain-core>=1.2.21",
     "langchain-azure-ai[opentelemetry,tools]>=1.1.1",
+    "chardet>=7.4.0.post2",
 ]

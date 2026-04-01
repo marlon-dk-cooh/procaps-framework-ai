@@ -6,6 +6,7 @@ requirements.txt
 
 # Learning (for tesing purposes)
 learning/
+*.ipynb
 
 # Databricks config
 .databrickscfg
