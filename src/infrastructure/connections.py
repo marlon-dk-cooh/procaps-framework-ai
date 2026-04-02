@@ -11,27 +11,35 @@ from src.utils.app_logger import configure_logging, get_logger
 
 logger = get_logger(__name__)
 
+PATH_ERROR_MSG = "Error al obtener la ruta: %s"
+
 class MountPoint:
     """Acceso a archivos en punto de montura.
+    
     Args:
         root: Ruta raíz del mount point.
             Ej. ``"/mnt/bronce"`` o ``"./data"``.
+        container: Opcional. Nombre del contenedor a usar como subruta base.
     """
 
-    def __init__(self, root: str):
+    def __init__(self, root: str, container: str | None = None):
         self.root = root
+        self.container = container
         logger.info("Punto de montura inicializado en: %s", self.root)
 
-    def get_path(self, path: str) -> str:
+    def get_path(self, directory: str) -> str:
         """Construye la ruta absoluta combinando root + path relativo.
 
         Args:
-            path: Ruta relativa dentro del mount point.
+            directory: Ruta relativa dentro del mount point.
 
         Returns:
             Ruta absoluta como string.
         """
-        return os.path.join(self.root, path)
+        if self.container is not None:
+            return os.path.join(self.root, self.container) + "/" + directory
+        else:
+            return os.path.join(self.root, directory)
 
     def list_files(self, directory: str = "") -> List[str]:
         """Lista recursivamente todos los archivos bajo un directorio.
@@ -47,59 +55,75 @@ class MountPoint:
             Lista de rutas relativas al root de los archivos encontrados.
             Los directorios son excluidos del resultado.
         """
-        base = self.get_path(directory)
+        try:
+            base = self.get_path(directory)
+        except Exception as e:
+            logger.error(PATH_ERROR_MSG, e)
+            return []
         paths: List[str] = []
         try:
             for dirpath, _, filenames in os.walk(base):
                 for filename in filenames:
                     abs_path = os.path.join(dirpath, filename)
-                    rel_path = os.path.relpath(abs_path, self.root)
+                    rel_path = os.path.relpath(abs_path, base)
                     paths.append(rel_path)
         except Exception as e:
             logger.error("Error al listar archivos en %s: %s", base, e)
         return paths
 
-    def read_file(self, file_path: str) -> bytes:
+    def read_file(self, directory: str = "") -> bytes:
         """Lee el contenido completo de un archivo como bytes.
 
         Equivalente a ``StorageAccount.read_file``, pero usa ``open()``
         en lugar del SDK de Azure.
 
         Args:
-            file_path: Ruta relativa al root del archivo a leer.
+            directory: Ruta relativa al root del archivo a leer.
                 Ej. ``"raw/invoices/invoice_001.pdf"``.
 
         Returns:
             Contenido crudo del archivo como ``bytes``.
             Devuelve ``b""`` si hay un error.
         """
-        abs_path = self.get_path(file_path)
         try:
-            with open(abs_path, "rb") as f:
+            base = self.get_path(directory)
+        except Exception as e:
+            logger.error(PATH_ERROR_MSG, e)
+            return b""
+        
+        # Si el directorio es valido.
+        try:
+            with open(base, "rb") as f:
                 content = f.read()
-            logger.info("Se leyeron %d bytes de %s", len(content), abs_path)
+            logger.info("Se leyeron %d bytes de %s", len(content), base)
             return content
         except Exception as e:
-            logger.error("Error al leer el archivo %s: %s", abs_path, e)
+            logger.error("Error al leer el archivo %s: %s", base, e)
             return b""
 
-    def get_file_size(self, file_path: str) -> float:
+    def get_file_size(self, directory: str = "") -> float:
         """Obtiene el tamaño de un archivo en kilobytes (kB) sin leerlo.
 
         Equivalente a ``StorageAccount.get_file_size``.
 
         Args:
-            file_path: Ruta relativa al root del archivo.
+            directory: Ruta relativa al root del archivo.
 
         Returns:
             Tamaño en kB. Devuelve ``0.0`` si hay un error.
         """
-        abs_path = self.get_path(file_path)
         try:
-            return os.path.getsize(abs_path) / 1024
+            base = self.get_path(directory)
+        except Exception as e:
+            logger.error(PATH_ERROR_MSG, e)
+            return 0.0
+
+        # Si el directorio es valido.
+        try:
+            return os.path.getsize(base) / 1024
         except Exception as e:
             logger.error(
-                "Error al obtener tamaño del archivo %s: %s", abs_path, e
+                "Error al obtener tamaño del archivo %s: %s", base, e
             )
             return 0.0
 

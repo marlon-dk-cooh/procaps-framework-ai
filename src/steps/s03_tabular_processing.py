@@ -1,5 +1,5 @@
 # Databricks notebook source
-from src.infrastructure.connections import StorageAccount
+from src.infrastructure.connections import MountPoint
 from src.utils.app_logger import get_logger, configure_logging
 from src.core.file_helpers import filter_by_size
 from config.settings import settings
@@ -8,15 +8,12 @@ import chardet, json, re, io, sys
 
 # ========== CARGA DE SETTINGS ==========
 STEP_NAME = "s03_tabular_processing"
-
+CONTAINER = "bronze"
 csv = r"\.csv$"
 xlsx = r"\.xlsx$"
 xls = r"\.xls$"
 
-st_account = StorageAccount(
-    account_name=settings.azure_storage_account_name,
-    account_key=settings.azure_storage_account_key
-)
+st_account = MountPoint(root="./dbfs/mnt/", container=CONTAINER)
 
 with open("./azpocdk/grouped_paths.json", "r") as f:
     data = json.load(f)

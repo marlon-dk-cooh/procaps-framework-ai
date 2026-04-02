@@ -7,7 +7,7 @@ from src.core.file_helpers import (
     ext_in_others
 )
 from src.utils.app_logger import get_logger, configure_logging
-from src.infrastructure.connections import StorageAccount
+from src.infrastructure.connections import MountPoint
 from config.settings import settings
 import os, re
 import json
@@ -21,14 +21,11 @@ def main(container: str, directory: str, **kwargs):
     logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
     
     # 1. Definir conexiones
-    storage = StorageAccount(
-        account_name=settings.azure_storage_account_name,
-        account_key=settings.azure_storage_account_key
-    )
+    storage = MountPoint(root=f"/mnt/{container}")
 
     # 2. Listar archivos
     try:
-        paths = storage.list_files(container=container, directory=directory)
+        paths = storage.list_files(directory=directory)
         logger.info(f"Encontrados {len(paths)} archivos en {container}/{directory}")
     except Exception as e:
         logger.error(f"Error accediendo a Storage Account: {e}")

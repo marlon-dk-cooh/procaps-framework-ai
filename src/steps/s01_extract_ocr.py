@@ -5,7 +5,7 @@ from dataclasses import asdict
 from collections import defaultdict
 
 from config.settings import settings
-from src.infrastructure.connections import StorageAccount, DocumentIntelligenceConnection
+from src.infrastructure.connections import MountPoint, DocumentIntelligenceConnection
 from src.utils.app_logger import get_logger, configure_logging
 from src.core.file_helpers import classify_file_by_extension
 
@@ -13,10 +13,7 @@ from src.core.file_helpers import classify_file_by_extension
 STEP_NAME = "s01_extract_ocr"
 logger = get_logger(STEP_NAME)
 
-storage = StorageAccount(
-    account_name=settings.azure_storage_account_name,
-    account_key=settings.azure_storage_account_key
-)
+storage = MountPoint(root=f"/mnt/{container}")
 
 doc_intel = DocumentIntelligenceConnection(
     endpoint=settings.azure_document_intelligence_endpoint,
@@ -25,8 +22,7 @@ doc_intel = DocumentIntelligenceConnection(
 
 # ======== LOGICA PRINCIPAL ==============
 
-# #TODO: Does the file require document intelligence?
-def requires_document_intelligence(st_account: StorageAccount = storage):
+def requires_document_intelligence(container: str, directory: str, st_account: MountPoint = storage):
     """Define si es necesario realizar lectura por OCR a archivos
     
     Args:
@@ -38,13 +34,10 @@ def requires_document_intelligence(st_account: StorageAccount = storage):
         `ej: {"raw/invoices/invoice_001.pdf": "raw/invoices/invoice_001_analyzed.json"}`
     """
     
-    CONTAINER = "bronce" # Let's test with bronze-rag.
-    DIRECTORY = "/"
     results_summary = defaultdict(list)
-
     try:
-        paths = st_account.list_files(container=CONTAINER, directory=DIRECTORY)
-        logger.info(f"Encontrados {len(paths)} archivos en {CONTAINER}/{DIRECTORY}")
+        paths = st_account.list_files(directory=directory)
+        logger.info(f"Encontrados {len(paths)} archivos en {container}/{directory}")
     except Exception as e:
         logger.error(f"Error accediendo a Storage Account: {e}")
 
@@ -66,8 +59,7 @@ def requires_document_intelligence(st_account: StorageAccount = storage):
 
 def process_ocr_files(
     ocr_paths: Dict[str, List[str]], 
-    st_account: StorageAccount = storage,
-    container: str = "bronce",
+    st_account: MountPoint = storage,
     doc_intel: DocumentIntelligenceConnection = doc_intel,
     max_pages_per_request: int = 2000
 ) -> Dict[str, any]:
@@ -90,7 +82,7 @@ def process_ocr_files(
         for file_path in file_paths:
             try:
                 logger.info(f"📄 Leyendo bytes desde ADLS: {file_path}")
-                file_bytes = st_account.read_file(container=container, file_path=file_path)
+                file_bytes = st_account.read_file(file_path=file_path)
 
                 if not file_bytes:
                     logger.warning(f"⚠️ Archivo vacio, saltando: {file_path}")
@@ -132,7 +124,7 @@ def process_ocr_files(
 
 def batch_processing(
     file_path: str, 
-    st_account: StorageAccount = storage, 
+    st_account: MountPoint = storage, 
     doc_intel: DocumentIntelligenceConnection = doc_intel,
     max_pages_per_request: int = 2000
 ):
@@ -149,6 +141,6 @@ def model_selection():
 
 if __name__ == "__main__":
     configure_logging()
-    result_summary = requires_document_intelligence()
+    result_summary = requires_document_intelligence(container="bronze", directory="/")
     results = process_ocr_files(ocr_paths=result_summary)
     logger.info(results)

@@ -1,5 +1,5 @@
 # Databricks notebook source
-from src.infrastructure.connections import StorageAccount
+from src.infrastructure.connections import MountPoint
 from src.utils.app_logger import get_logger, configure_logging
 from src.core.file_helpers import filter_by_size
 from config.settings import settings
@@ -8,20 +8,26 @@ import concurrent.futures, json, re, io, sys
 
 # ========== CARGA DE SETTINGS ===========
 STEP_NAME = "s02_structured_data_processing"
+CONTAINER = "bronze"
+st_account = MountPoint(root="./dbfs/mnt/", container=CONTAINER)
 parquet = r"\.parquet$"
 json_re = r"\.json$"
-st_account = StorageAccount(
-    account_name=settings.azure_storage_account_name,
-    account_key=settings.azure_storage_account_key
-)
 
+# Asistente de metadatos.
 with open("./azpocdk/grouped_paths.json", "r") as f:
     data = json.load(f)
 
-# ========== LOGICA PRINCIPAL ==============
+# ========== LÓGICA PRINCIPAL ==============
 
-def load_parquet_files(timeout: int, container: str = "bronze", size_limit: int = None, **kwargs):
-    """Carga archivos parquet desde el Storage Account."""
+def load_parquet_files(size_limit: int = None, **kwargs):
+    """
+    Carga archivos parquet desde el punto de montura.
+        Args:
+            size_limit: Tamaño máximo en MB para filtrar los archivos.
+            **kwargs: Argumentos adicionales.
+        Returns:
+            Colección de archivos parquet cargados.
+    """
     func_name = sys._getframe().f_code.co_name
     logger = get_logger(f"{STEP_NAME}.{func_name}")
     logger.info(f" --- Iniciando paso: {STEP_NAME} ---")
@@ -34,9 +40,7 @@ def load_parquet_files(timeout: int, container: str = "bronze", size_limit: int 
     for file in data["structured"]:
         if re.search(parquet, file, re.I):
             logger.info(f"👁️ Leyendo archivo: {file}")
-            from_asdl = st_account.read_file(
-                container=container, file_path=file, timeout=timeout
-            )
+            from_asdl = st_account.read_file(file_path=file)
             if not from_asdl:
                 logger.warning(f"⏳ Archivo vacío o timeout al leer '{file}'. Saltando...")
                 continue
@@ -47,7 +51,7 @@ def load_parquet_files(timeout: int, container: str = "bronze", size_limit: int 
 
     return parquet_collection
 
-def load_json_files(timeout: int, container: str = "bronze", size_limit: int = None, **kwargs):
+def load_json_files(timeout: int, size_limit: int = None, **kwargs):
     """Carga archivos json desde el Storage Account."""
     func_name = sys._getframe().f_code.co_name
     logger = get_logger(f"{STEP_NAME}.{func_name}")
@@ -61,9 +65,7 @@ def load_json_files(timeout: int, container: str = "bronze", size_limit: int = N
     for file in data["structured"]:
         if re.search(json_re, file, re.I):
             logger.info(f"👁️ Leyendo archivo: {file}")
-            from_asdl = st_account.read_file(
-                container=container, file_path=file, timeout=timeout
-            )
+            from_asdl = st_account.read_file(directory=file)
             if not from_asdl:
                 logger.warning(f"⏳ Archivo vacío o timeout al leer '{file}'. Saltando...")
                 continue
@@ -75,7 +77,10 @@ def load_json_files(timeout: int, container: str = "bronze", size_limit: int = N
     return json_collection
 
 if __name__ == "__main__":
+
+    # logs
     configure_logging()
+    
     # Limite de 5 MB
     size_limit = 5000
     parquet_collection = load_parquet_files(timeout=60, size_limit=size_limit)
