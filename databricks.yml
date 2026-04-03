@@ -13,21 +13,9 @@ sync:
     - requirements.txt
 
 variables:
-  availability:
-    description: "Cloud provider VM availability type"
-    default: "ON_DEMAND_AZURE"
-  node_type_id:
-    description: "VM instance type for the cluster"
-    default: "Standard_D8s_v3"
-  num_workers:
-    description: "Number of worker nodes"
-    default: 1
-  autotermination_minutes:
-    description: "Minutes of inactivity before cluster terminates"
-    default: 5
-  spark_version:
-    description: "Databricks Runtime version"
-    default: "17.3.x-scala2.13"
+  existing_cluster_id: 
+    description: ""
+    default: "0330-135329-abkt38v6"
 
 targets:
   dev:
@@ -38,12 +26,8 @@ targets:
       root_path: /Users/${workspace.current_user.userName}/bundles/${bundle.name}
 
     variables:
-      availability: "ON_DEMAND_AZURE"
-      node_type_id: "Standard_D8s_v3"
-      num_workers: 1
-      autotermination_minutes: 5
-      spark_version: "17.3.x-scala2.13" 
-      
+      existing_cluster_id: "0330-135329-abkt38v6"
+  
 resources:
   jobs:
     index_workflow_job:
@@ -52,21 +36,10 @@ resources:
       permissions:
         - service_principal_name: "50d36df7-3ffa-45bd-bfa8-0520d15f2c9b"
           level: CAN_MANAGE
-          
-      job_clusters:
-        - job_cluster_key: ia_cluster
-          new_cluster:
-            spark_version: ${var.spark_version}
-            node_type_id: ${var.node_type_id}
-            num_workers: ${var.num_workers}
-            autotermination_minutes: ${var.autotermination_minutes}
-            azure_attributes:
-              availability: ${var.availability}
-              first_on_demand: 1
 
       tasks:
         - task_key: s00_load_files
-          job_cluster_key: ia_cluster
+          existing_cluster_id: ${var.existing_cluster_id}
           libraries: &common_libraries
             - pypi:
                 package: "aiohttp>=3.13.3"
@@ -84,7 +57,7 @@ resources:
             notebook_path: "./src/steps/s00_load_files.py"
 
         - task_key: s01_extract_ocr
-          job_cluster_key: ia_cluster
+          existing_cluster_id: ${var.existing_cluster_id}
           depends_on:
             - task_key: s00_load_files
           libraries: *common_libraries
@@ -92,7 +65,7 @@ resources:
             notebook_path: "./src/steps/s01_extract_ocr.py"
 
         # - task_key: s02_non_structured_data_processing
-        #   job_cluster_key: ia_cluster
+        #   existing_cluster_id: ${var.existing_cluster_id}
         #   depends_on:
         #     - task_key: s01_extract_ocr
         #   notebook_task:
