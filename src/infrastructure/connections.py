@@ -22,7 +22,7 @@ class MountPoint:
         container: Opcional. Nombre del contenedor a usar como subruta base.
     """
 
-    def __init__(self, root: str, container: str | None = None):
+    def __init__(self, root: str = "./dbfs/mnt", container: str | None = None):
         self.root = root
         self.container = container
         logger.info("Punto de montura inicializado en: %s", self.root)

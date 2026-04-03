@@ -21,7 +21,7 @@ def main(container: str, directory: str, **kwargs):
     logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
     
     # 1. Definir conexiones
-    storage = MountPoint(root=f"/mnt/{container}")
+    storage = MountPoint(container=container)
 
     # 2. Listar archivos
     try:
@@ -35,7 +35,7 @@ def main(container: str, directory: str, **kwargs):
     file_sizes = {}
     for file_path in paths:
         group, ext = classify_file_by_extension(file_path)
-        size_file = storage.get_file_size(container=container, file_path=file_path)
+        size_file = storage.get_file_size(directory=file_path)
         file_sizes[file_path] = f"{size_file} kB"
         logger.info(f"\n--- Procesando: {file_path} [Grupo: {group}, Extensión: {ext}, Tamaño: {size_file} kB] ---")
     
@@ -71,12 +71,12 @@ if __name__ == "__main__":
     configure_logging()
     # Datalake Procaps
     main(
-            container="bronce", 
-            directory="/",
-            output_path="./azpocdk", 
-            extension_in_others_class="output.json", 
+            container="bronze", 
+            directory="",
+            output_path="./helpers", 
+            extension_in_others_class="others_ext.json", 
             len_per_group_extension="len_per_group.json", 
-            grouped_extension="grouped_paths.json",
+            grouped_extension="grouped_ext.json",
             extension_in_structured_class="structured_ext.json",
             file_sizes="file_sizes.json"
     )
