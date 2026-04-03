@@ -13,9 +13,9 @@ csv = r"\.csv$"
 xlsx = r"\.xlsx$"
 xls = r"\.xls$"
 
-st_account = MountPoint(root="./dbfs/mnt/", container=CONTAINER)
+st_account = MountPoint(container=CONTAINER)
 
-with open("./azpocdk/grouped_paths.json", "r") as f:
+with open("./helpers/grouped_paths.json", "r") as f:
     data = json.load(f)
 
 # ========== LOGICA PRINCIPAL ==========

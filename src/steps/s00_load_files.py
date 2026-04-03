@@ -13,6 +13,8 @@ import os, re
 import json
 # ======== CARGA DE SETTINGS =============
 STEP_NAME = "s00_load_files"
+CONTAINER = "bronze"
+ROOT = "/dbfs/mnt/azstapropdev"
 
 # ======== LOGICA PRINCIPAL ==============
 def main(container: str, directory: str, **kwargs):
@@ -21,7 +23,7 @@ def main(container: str, directory: str, **kwargs):
     logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
     
     # 1. Definir conexiones
-    storage = MountPoint(container=container)
+    storage = MountPoint(root=ROOT, container=container)
 
     # 2. Listar archivos
     try:
@@ -71,7 +73,7 @@ if __name__ == "__main__":
     configure_logging()
     # Datalake Procaps
     main(
-            container="bronze", 
+            container=CONTAINER, 
             directory="",
             output_path="./helpers", 
             extension_in_others_class="others_ext.json", 

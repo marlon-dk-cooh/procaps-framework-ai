@@ -9,12 +9,14 @@ import concurrent.futures, json, re, io, sys
 # ========== CARGA DE SETTINGS ===========
 STEP_NAME = "s02_structured_data_processing"
 CONTAINER = "bronze"
-st_account = MountPoint(root="./dbfs/mnt/", container=CONTAINER)
+ROOT = "/dbfs/mnt/azstapropdev"
+
+st_account = MountPoint(root=ROOT, container=CONTAINER)
 parquet = r"\.parquet$"
 json_re = r"\.json$"
 
 # Asistente de metadatos.
-with open("./azpocdk/grouped_paths.json", "r") as f:
+with open("./helpers/grouped_paths.json", "r") as f:
     data = json.load(f)
 
 # ========== LÓGICA PRINCIPAL ==============
@@ -87,5 +89,5 @@ if __name__ == "__main__":
 
     # Leer todos los archivos parquet de la colección y concatenarlos en un solo DataFrame.
     df = pd.concat([pd.read_parquet(f) for f in parquet_collection], ignore_index=True)
-    df.to_csv("./azpocdk/all_parquet_files.csv")
+    df.to_csv("./helpers/all_parquet_files.csv")
     logger.info(f"Columnas del DataFrame: {df.columns}")

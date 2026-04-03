@@ -11,10 +11,11 @@ from src.core.file_helpers import classify_file_by_extension
 
 # ======== CARGA DE SETTINGS =============
 STEP_NAME = "s01_extract_ocr"
+CONTAINER = "bronze"
+ROOT = "/dbfs/mnt/azstapropdev"
 logger = get_logger(STEP_NAME)
 
-storage = MountPoint(root=f"/mnt/{container}")
-
+storage = MountPoint(root=ROOT, container=CONTAINER)
 doc_intel = DocumentIntelligenceConnection(
     endpoint=settings.azure_document_intelligence_endpoint,
     key=settings.azure_document_intelligence_key
@@ -141,6 +142,6 @@ def model_selection():
 
 if __name__ == "__main__":
     configure_logging()
-    result_summary = requires_document_intelligence(container="bronze", directory="/")
+    result_summary = requires_document_intelligence(container=CONTAINER, directory="")
     results = process_ocr_files(ocr_paths=result_summary)
     logger.info(results)
