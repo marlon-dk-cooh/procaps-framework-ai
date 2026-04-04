@@ -13,6 +13,207 @@ logger = get_logger(__name__)
 
 PATH_ERROR_MSG = "Error al obtener la ruta: %s"
 
+
+class DBFSMountPoint:
+    """Acceso a archivos en DBFS (Databricks File System).
+
+    Reemplaza os.walk / open() / os.path.getsize por dbutils.fs.*
+    manteniendo la misma interfaz pública que MountPoint.
+
+    Args:
+        root: Ruta raíz en DBFS.
+            Ej. ``"dbfs:/mnt/bronce"`` o ``"/mnt/bronce"``.
+        container: Opcional. Nombre del contenedor a usar como subruta base.
+        dbutils: Instancia de dbutils (inyectada para facilitar tests).
+            En un notebook de Databricks puedes pasar `dbutils` directamente.
+    """
+
+    def __init__(
+        self,
+        root: str = "dbfs:/mnt",
+        container: str | None = None,
+        dbutils=None,
+    ):
+        # Normaliza siempre al esquema dbfs:/ que entiende dbutils.fs
+        self.root = self._normalize(root)
+        self.container = container
+        self._dbutils = dbutils or self._get_dbutils()
+        logger.info("Punto de montura DBFS inicializado en: %s", self.root)
+
+    # ------------------------------------------------------------------
+    # Helpers internos
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize(path: str) -> str:
+        """Garantiza el prefijo ``dbfs:/`` para todas las rutas."""
+        if path.startswith("/dbfs/"):
+            # /dbfs/mnt/... → dbfs:/mnt/...  (path local del driver)
+            return "dbfs:" + path[5:]
+        if not path.startswith("dbfs:/"):
+            return "dbfs:/" + path.lstrip("/")
+        return path
+
+    @staticmethod
+    def _to_local(dbfs_path: str) -> str:
+        """
+        Convierte ``dbfs:/foo`` → ``/dbfs/foo`` para poder usar
+        open() nativo en el nodo driver (útil en read_file).
+        """
+        if dbfs_path.startswith("dbfs:/"):
+            return "/dbfs/" + dbfs_path[len("dbfs:/"):]
+        return dbfs_path
+
+    @staticmethod
+    def _get_dbutils():
+        """
+        Intenta obtener dbutils del contexto IPython (notebooks Databricks).
+        Lanza un error claro si no está disponible.
+        """
+        try:
+            import IPython
+            ip = IPython.get_ipython()
+            if ip and "dbutils" in ip.user_ns:
+                return ip.user_ns["dbutils"]
+        except ImportError:
+            pass
+        raise RuntimeError(
+            "dbutils no está disponible. "
+            "Ejecútalo en un notebook de Databricks o pásalo explícitamente: "
+            "DBFSMountPoint(dbutils=dbutils)"
+        )
+
+    # ------------------------------------------------------------------
+    # API pública  (misma firma que MountPoint)
+    # ------------------------------------------------------------------
+
+    def get_path(self, directory: str) -> str:
+        """Construye la ruta DBFS combinando root [+ container] + directory.
+
+        Returns:
+            Ruta con esquema ``dbfs:/`` lista para dbutils.fs.
+        """
+        if self.container is not None:
+            base = f"{self.root}/{self.container}"
+        else:
+            base = self.root
+
+        return f"{base}/{directory}".rstrip("/")
+
+    def list_files(
+        self, directory: str = "", max_workers: int = 10
+    ) -> List[str]:
+        """Lista recursivamente todos los archivos bajo un directorio en DBFS.
+
+        Usa ThreadPoolExecutor para listar múltiples directorios en paralelo,
+        ya que el cuello de botella es I/O de red (llamadas REST), no CPU.
+
+        Args:
+            directory: Sub-ruta relativa al root. ``""`` lista desde la raíz.
+            max_workers: Número de hilos concurrentes (default 10).
+
+        Returns:
+            Lista de rutas relativas al root de los archivos encontrados.
+        """
+        try:
+            base = self.get_path(directory)
+        except Exception as e:
+            logger.error(PATH_ERROR_MSG, e)
+            return []
+
+        paths: List[str] = []
+        dirs_to_explore = [base]
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            while dirs_to_explore:
+                # Lanza todas las llamadas ls() en paralelo
+                futures = {
+                    executor.submit(self._dbutils.fs.ls, d): d
+                    for d in dirs_to_explore
+                }
+                dirs_to_explore = []
+
+                for future in as_completed(futures):
+                    try:
+                        entries = future.result()
+                    except Exception as e:
+                        logger.error(
+                            "Error al listar %s: %s", futures[future], e
+                        )
+                        continue
+
+                    for entry in entries:
+                        if entry.name.endswith("/"):  # directorio
+                            dirs_to_explore.append(entry.path)
+                        else:  # archivo
+                            rel = entry.path[len(base):].lstrip("/")
+                            paths.append(rel)
+
+        return paths
+
+    def read_file(self, directory: str = "") -> bytes:
+        """Lee el contenido completo de un archivo como bytes.
+
+        Estrategia: usa ``open()`` sobre la ruta local ``/dbfs/...``
+        (disponible en el nodo driver), que es el equivalente directo
+        a la versión original con ``open(..., "rb")``.
+
+        Para archivos muy grandes en workers usa ``spark.read`` en su lugar.
+
+        Args:
+            directory: Ruta relativa al root del archivo a leer.
+
+        Returns:
+            Contenido crudo como ``bytes``. Devuelve ``b""`` si hay error.
+        """
+        try:
+            dbfs_path = self.get_path(directory)
+            local_path = self._to_local(dbfs_path)  # /dbfs/mnt/...
+        except Exception as e:
+            logger.error(PATH_ERROR_MSG, e)
+            return b""
+
+        try:
+            # open() estándar funciona sobre /dbfs/ en el driver
+            with open(local_path, "rb") as f:
+                content = f.read()
+            logger.info("Se leyeron %d bytes de %s", len(content), dbfs_path)
+            return content
+        except Exception as e:
+            logger.error("Error al leer el archivo %s: %s", dbfs_path, e)
+            return b""
+
+    def get_file_size(self, directory: str = "") -> float:
+        """Obtiene el tamaño de un archivo en kB **sin leerlo**.
+
+        Sustituye ``os.path.getsize`` por ``dbutils.fs.ls``, que devuelve
+        el campo ``FileInfo.size`` (en bytes) directamente desde el catálogo
+        de DBFS sin transferir datos.
+
+        Args:
+            directory: Ruta relativa al root del archivo.
+
+        Returns:
+            Tamaño en kB. Devuelve ``0.0`` si hay error.
+        """
+        try:
+            dbfs_path = self.get_path(directory)
+        except Exception as e:
+            logger.error(PATH_ERROR_MSG, e)
+            return 0.0
+
+        try:
+            # ls sobre un archivo individual devuelve una lista de 1 elemento
+            entries = self._dbutils.fs.ls(dbfs_path)
+            if not entries:
+                raise FileNotFoundError(f"No existe: {dbfs_path}")
+            return entries[0].size / 1024          # bytes → kB
+        except Exception as e:
+            logger.error(
+                "Error al obtener tamaño del archivo %s: %s", dbfs_path, e
+            )
+            return 0.0
+
 class MountPoint:
     """Acceso a archivos en punto de montura.
     

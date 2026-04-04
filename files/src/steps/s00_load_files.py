@@ -7,31 +7,28 @@ from src.core.file_helpers import (
     ext_in_others
 )
 from src.utils.app_logger import get_logger, configure_logging
-from src.infrastructure.connections import DBFSMountPoint
+from src.infrastructure.connections import MountPoint
 from config.settings import settings
 import os, re
 import json
+# ======== CARGA DE SETTINGS =============
+STEP_NAME = "s00_load_files"
+CONTAINER = "bronze"
+ROOT = "/dbfs/mnt/azstapropdev"
 
-# ================ CARGA DE SETTINGS ==================
-STEP_NAME = "s00 - Carga de datos."
-CONTAINER = "azstapropdev"
-MEDALLION = "bronze"
-DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
-# =====================================================
-
-# ================ LOGICA PRINCIPAL ===================
+# ======== LOGICA PRINCIPAL ==============
 def main(container: str, directory: str, **kwargs):
     # Logs
     logger = get_logger(STEP_NAME)
     logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
     
     # 1. Definir conexiones
-    storage = DBFSMountPoint(container=container)
+    storage = MountPoint(root=ROOT, container=container)
 
     # 2. Listar archivos
     try:
         paths = storage.list_files(directory=directory)
-        logger.info(f"Encontrados {len(paths)} archivos en {container}/{directory}:")
+        logger.info(f"Encontrados {len(paths)} archivos en {container}/{directory}")
     except Exception as e:
         logger.error(f"Error accediendo a Storage Account: {e}")
         return
