@@ -12,6 +12,7 @@ from src.utils.app_logger import configure_logging, get_logger
 logger = get_logger(__name__)
 
 PATH_ERROR_MSG = "Error al obtener la ruta: %s"
+DBFS_SCHEME = "dbfs:/"
 
 
 class DBFSMountPoint:
@@ -49,9 +50,9 @@ class DBFSMountPoint:
         """Garantiza el prefijo ``dbfs:/`` para todas las rutas."""
         if path.startswith("/dbfs/"):
             # /dbfs/mnt/... → dbfs:/mnt/...  (path local del driver)
-            return "dbfs:" + path[5:]
-        if not path.startswith("dbfs:/"):
-            return "dbfs:/" + path.lstrip("/")
+            return DBFS_SCHEME + path[5:]
+        if not path.startswith(DBFS_SCHEME):
+            return DBFS_SCHEME + path.lstrip("/")
         return path
 
     @staticmethod
@@ -60,8 +61,8 @@ class DBFSMountPoint:
         Convierte ``dbfs:/foo`` → ``/dbfs/foo`` para poder usar
         open() nativo en el nodo driver (útil en read_file).
         """
-        if dbfs_path.startswith("dbfs:/"):
-            return "/dbfs/" + dbfs_path[len("dbfs:/"):]
+        if dbfs_path.startswith(DBFS_SCHEME):
+            return "/dbfs/" + dbfs_path[len(DBFS_SCHEME):]
         return dbfs_path
 
     @staticmethod

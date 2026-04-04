@@ -6,20 +6,21 @@ from config.settings import settings
 import pandas as pd
 import concurrent.futures, json, re, io, sys
 
-# ========== CARGA DE SETTINGS ===========
-STEP_NAME = "s02_structured_data_processing"
-CONTAINER = "bronze"
-ROOT = "/dbfs/mnt/azstapropdev"
+# ================ CARGA DE SETTINGS ==================
+STEP_NAME = "s02 - Procesamiento de datos estructurados."
+CONTAINER = "azstapropdev"
+MEDALLION = "bronze"
+DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
 
-st_account = MountPoint(root=ROOT, container=CONTAINER)
+st_account = DBFSMountPoint(container=DEFAULT_DIRECTORY)
 parquet = r"\.parquet$"
 json_re = r"\.json$"
 
-# Asistente de metadatos.
+# Asistente de metadatos. (Tiene que estar en Cosmos!)
 with open("./helpers/grouped_paths.json", "r") as f:
     data = json.load(f)
 
-# ========== LÓGICA PRINCIPAL ==============
+# ================ LÓGICA PRINCIPAL ==================
 
 def load_parquet_files(size_limit: int = None, **kwargs):
     """
@@ -42,7 +43,7 @@ def load_parquet_files(size_limit: int = None, **kwargs):
     for file in data["structured"]:
         if re.search(parquet, file, re.I):
             logger.info(f"👁️ Leyendo archivo: {file}")
-            from_asdl = st_account.read_file(file_path=file)
+            from_asdl = st_account.read_file(directory=file)
             if not from_asdl:
                 logger.warning(f"⏳ Archivo vacío o timeout al leer '{file}'. Saltando...")
                 continue

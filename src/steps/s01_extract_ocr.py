@@ -5,25 +5,26 @@ from dataclasses import asdict
 from collections import defaultdict
 
 from config.settings import settings
-from src.infrastructure.connections import MountPoint, DocumentIntelligenceConnection
+from src.infrastructure.connections import DBFSMountPoint, DocumentIntelligenceConnection
 from src.utils.app_logger import get_logger, configure_logging
 from src.core.file_helpers import classify_file_by_extension
 
-# ======== CARGA DE SETTINGS =============
-STEP_NAME = "s01_extract_ocr"
-CONTAINER = "bronze"
-ROOT = "/dbfs/mnt/azstapropdev"
+# ================ CARGA DE SETTINGS ==================
+STEP_NAME = "s01 - Extracción de datos mediante OCR."
+CONTAINER = "azstapropdev"
+MEDALLION = "bronze"
+DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
 logger = get_logger(STEP_NAME)
 
-storage = MountPoint(root=ROOT, container=CONTAINER)
+storage = DBFSMountPoint(container=DEFAULT_DIRECTORY)
 doc_intel = DocumentIntelligenceConnection(
     endpoint=settings.azure_document_intelligence_endpoint,
     key=settings.azure_document_intelligence_key
 )
 
-# ======== LOGICA PRINCIPAL ==============
+# ================ LOGICA PRINCIPAL ==================
 
-def requires_document_intelligence(container: str, directory: str, st_account: MountPoint = storage):
+def requires_document_intelligence(container: str, directory: str, st_account: DBFSMountPoint = storage):
     """Define si es necesario realizar lectura por OCR a archivos
     
     Args:
@@ -60,7 +61,7 @@ def requires_document_intelligence(container: str, directory: str, st_account: M
 
 def process_ocr_files(
     ocr_paths: Dict[str, List[str]], 
-    st_account: MountPoint = storage,
+    st_account: DBFSMountPoint = storage,
     doc_intel: DocumentIntelligenceConnection = doc_intel,
     max_pages_per_request: int = 2000
 ) -> Dict[str, any]:
@@ -83,7 +84,7 @@ def process_ocr_files(
         for file_path in file_paths:
             try:
                 logger.info(f"📄 Leyendo bytes desde ADLS: {file_path}")
-                file_bytes = st_account.read_file(file_path=file_path)
+                file_bytes = st_account.read_file(directory=file_path)
 
                 if not file_bytes:
                     logger.warning(f"⚠️ Archivo vacio, saltando: {file_path}")
@@ -125,7 +126,7 @@ def process_ocr_files(
 
 def batch_processing(
     file_path: str, 
-    st_account: MountPoint = storage, 
+    st_account: DBFSMountPoint = storage, 
     doc_intel: DocumentIntelligenceConnection = doc_intel,
     max_pages_per_request: int = 2000
 ):
@@ -142,6 +143,6 @@ def model_selection():
 
 if __name__ == "__main__":
     configure_logging()
-    result_summary = requires_document_intelligence(container=CONTAINER, directory="")
+    result_summary = requires_document_intelligence(container=CONTAINER, directory=MEDALLION)
     results = process_ocr_files(ocr_paths=result_summary)
     logger.info(results)
