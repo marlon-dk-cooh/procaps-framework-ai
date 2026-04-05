@@ -29,7 +29,7 @@ def main(container: str, medallion: str, directory: str, **kwargs):
 
     # 2. Listar archivos
     try:
-        paths = [storage.get_file_size(directory=path) for path in storage.list_files(directory=directory)]
+        paths = [storage.get_path(directory=path) for path in storage.list_files(directory=directory)]
         logger.info(f"Encontrados {len(paths)} archivos en {directory}:")
     except Exception as e:
         logger.error(f"Error accediendo a Storage Account: {e}")
@@ -89,5 +89,5 @@ if __name__ == "__main__":
     )
 
     for path in paths:
-        logger.info(f"Ruta: {path}")
+        print(f"Ruta: {path}")
 
