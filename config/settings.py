@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     azure_storage_account_name: str = ""
     azure_storage_account_key: str = ""
     azure_storage_account_container: str = ""
+
+    # Cosmos DB.
+    azure_cosmos_endpoint: str = ""
+    azure_cosmos_key: str = ""
+    azure_cosmos_database: str = ""
+    azure_cosmos_container: str = "pipeline_metadata"
     
     class Config:
         env_file = ".env"
