@@ -33,6 +33,7 @@ class DBFSMountPoint:
         self,
         root: str = "dbfs:/mnt",
         container: str | None = None,
+        medallion: str | None = None,
         dbutils=None,
     ):
         # Normaliza siempre al esquema dbfs:/ que entiende dbutils.fs
