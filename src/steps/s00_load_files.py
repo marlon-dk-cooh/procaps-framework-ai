@@ -35,8 +35,6 @@ def main(container: str, medallion: str, directory: str, **kwargs):
         logger.error(f"Error accediendo a Storage Account: {e}")
         return
 
-    return paths
-
     # 3. Procesar cada archivo con classify_file_by_extension y obtener el tamaño.
     file_sizes = {}
     for file_path in paths:
