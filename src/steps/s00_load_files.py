@@ -20,18 +20,18 @@ DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
 # =====================================================
 
 # ================ LOGICA PRINCIPAL ===================
-def main(container: str, directory: str, **kwargs):
+def main(directory: str = DEFAULT_DIRECTORY, **kwargs):
     # Logs
     logger = get_logger(STEP_NAME)
     logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
     
     # 1. Definir conexiones
-    storage = DBFSMountPoint(container=container)
+    storage = DBFSMountPoint()
 
     # 2. Listar archivos
     try:
         paths = storage.list_files(directory=directory)
-        logger.info(f"Encontrados {len(paths)} archivos en {container}/{directory}:")
+        logger.info(f"Encontrados {len(paths)} archivos en {directory}:")
     except Exception as e:
         logger.error(f"Error accediendo a Storage Account: {e}")
         return
@@ -76,8 +76,7 @@ if __name__ == "__main__":
     configure_logging()
     # Datalake Procaps
     main(
-            container=CONTAINER, 
-            directory="",
+            directory=DEFAULT_DIRECTORY,
             output_path="./helpers", 
             extension_in_others_class="others_ext.json", 
             len_per_group_extension="len_per_group.json", 

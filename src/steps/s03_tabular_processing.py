@@ -1,5 +1,5 @@
 # Databricks notebook source
-from src.infrastructure.connections import MountPoint
+from src.infrastructure.connections import DBFSMountPoint
 from src.utils.app_logger import get_logger, configure_logging
 from src.core.file_helpers import filter_by_size
 from config.settings import settings
@@ -9,18 +9,19 @@ import chardet, json, re, io, sys
 # ========== CARGA DE SETTINGS ==========
 STEP_NAME = "s03_tabular_processing"
 CONTAINER = "bronze"
+DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
 csv = r"\.csv$"
 xlsx = r"\.xlsx$"
 xls = r"\.xls$"
 
-st_account = MountPoint(container=CONTAINER)
+st_account = DBFSMountPoint()
 
 with open("./helpers/grouped_paths.json", "r") as f:
     data = json.load(f)
 
 # ========== LOGICA PRINCIPAL ==========
 
-def load_csv_files(container="bronze", timeout=300, size_limit: float = None, **kwargs):
+def load_csv_files(size_limit: float = None, **kwargs):
     """Carga archivos csv desde el Storage Account."""
     func_name = sys._getframe().f_code.co_name
     logger = get_logger(f"{STEP_NAME}.{func_name}")
@@ -34,7 +35,7 @@ def load_csv_files(container="bronze", timeout=300, size_limit: float = None, **
     for file in data["tabular"]:
         if re.search(csv, file, re.I):
             logger.info(f"👁️ Leyendo archivo: {file}")
-            from_asdl = st_account.read_file(container=container, file_path=file, timeout=timeout)
+            from_asdl = st_account.read_file(directory=file)
             read_file = io.BytesIO(from_asdl)
             csv_collection[file] = read_file
             logger.info(f"✅ Carga de {file} completada")

@@ -54,7 +54,7 @@ def load_parquet_files(size_limit: int = None, **kwargs):
 
     return parquet_collection
 
-def load_json_files(timeout: int, size_limit: int = None, **kwargs):
+def load_json_files(size_limit: int = None, **kwargs):
     """Carga archivos json desde el Storage Account."""
     func_name = sys._getframe().f_code.co_name
     logger = get_logger(f"{STEP_NAME}.{func_name}")
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     
     # Limite de 5 MB
     size_limit = 5000
-    parquet_collection = load_parquet_files(timeout=60, size_limit=size_limit)
+    parquet_collection = load_parquet_files(size_limit=size_limit)
 
     # Leer todos los archivos parquet de la colección y concatenarlos en un solo DataFrame.
     df = pd.concat([pd.read_parquet(f) for f in parquet_collection], ignore_index=True)

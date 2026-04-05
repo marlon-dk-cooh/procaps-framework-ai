@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, List, Optional
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
@@ -13,7 +14,6 @@ logger = get_logger(__name__)
 
 PATH_ERROR_MSG = "Error al obtener la ruta: %s"
 DBFS_SCHEME = "dbfs:/"
-
 
 class DBFSMountPoint:
     """Acceso a archivos en DBFS (Databricks File System).
@@ -83,10 +83,6 @@ class DBFSMountPoint:
             "Ejecútalo en un notebook de Databricks o pásalo explícitamente: "
             "DBFSMountPoint(dbutils=dbutils)"
         )
-
-    # ------------------------------------------------------------------
-    # API pública  (misma firma que MountPoint)
-    # ------------------------------------------------------------------
 
     def get_path(self, directory: str) -> str:
         """Construye la ruta DBFS combinando root [+ container] + directory.

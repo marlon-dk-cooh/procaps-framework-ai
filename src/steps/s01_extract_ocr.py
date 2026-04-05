@@ -24,7 +24,7 @@ doc_intel = DocumentIntelligenceConnection(
 
 # ================ LOGICA PRINCIPAL ==================
 
-def requires_document_intelligence(container: str, directory: str, st_account: DBFSMountPoint = storage):
+def requires_document_intelligence(directory: str = DEFAULT_DIRECTORY, st_account: DBFSMountPoint = storage):
     """Define si es necesario realizar lectura por OCR a archivos
     
     Args:
@@ -39,7 +39,7 @@ def requires_document_intelligence(container: str, directory: str, st_account: D
     results_summary = defaultdict(list)
     try:
         paths = st_account.list_files(directory=directory)
-        logger.info(f"Encontrados {len(paths)} archivos en {container}/{directory}")
+        logger.info(f"Encontrados {len(paths)} archivos en {directory}")
     except Exception as e:
         logger.error(f"Error accediendo a Storage Account: {e}")
 
@@ -143,6 +143,6 @@ def model_selection():
 
 if __name__ == "__main__":
     configure_logging()
-    result_summary = requires_document_intelligence(container=CONTAINER, directory=MEDALLION)
+    result_summary = requires_document_intelligence(directory=DEFAULT_DIRECTORY)
     results = process_ocr_files(ocr_paths=result_summary)
     logger.info(results)
