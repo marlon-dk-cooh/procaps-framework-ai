@@ -38,6 +38,7 @@ class DBFSMountPoint:
         # Normaliza siempre al esquema dbfs:/ que entiende dbutils.fs
         self.root = self._normalize(root)
         self.container = container
+        self.medallion = medallion
         self._dbutils = dbutils or self._get_dbutils()
         logger.info("Punto de montura DBFS inicializado en: %s", self.root)
 
@@ -92,6 +93,8 @@ class DBFSMountPoint:
         """
         if self.container is not None:
             base = f"{self.root}/{self.container}"
+        elif self.container is not None and self.medallion is not None:
+            base = f"{self.root}/{self.container}/{self.medallion}"
         else:
             base = self.root
 
