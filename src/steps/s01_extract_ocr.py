@@ -1,4 +1,10 @@
 # Databricks notebook source
+helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
+dbfs_root_files = dbutils.fs.ls("file:" + helpers_path)
+display(dbfs_root_files)
+
+# COMMAND ----------
+
 import json
 from typing import List, Dict
 from dataclasses import asdict
@@ -13,10 +19,9 @@ from src.core.file_helpers import classify_file_by_extension
 STEP_NAME = "s01 - Extracción de datos mediante OCR."
 CONTAINER = "azstapropdev"
 MEDALLION = "bronze"
-DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
 logger = get_logger(STEP_NAME)
 
-storage = DBFSMountPoint(container=DEFAULT_DIRECTORY)
+storage = DBFSMountPoint(container=CONTAINER, medallion=MEDALLION)
 doc_intel = DocumentIntelligenceConnection(
     endpoint=settings.azure_document_intelligence_endpoint,
     key=settings.azure_document_intelligence_key
@@ -24,7 +29,7 @@ doc_intel = DocumentIntelligenceConnection(
 
 # ================ LOGICA PRINCIPAL ==================
 
-def requires_document_intelligence(directory: str = DEFAULT_DIRECTORY, st_account: DBFSMountPoint = storage):
+def requires_document_intelligence(directory: str, st_account: DBFSMountPoint = storage):
     """Define si es necesario realizar lectura por OCR a archivos
     
     Args:
@@ -38,24 +43,24 @@ def requires_document_intelligence(directory: str = DEFAULT_DIRECTORY, st_accoun
     
     results_summary = defaultdict(list)
     try:
-        paths = st_account.list_files(directory=directory)
-        logger.info(f"Encontrados {len(paths)} archivos en {directory}")
+        with open(helpers_path + "/grouped_ext.json", "r") as f:
+            grouped_ext = json.load(f)
+            paths_for_ocr = {group:path for group, path in grouped_ext.items() if group in ("textual", "images")}
+        logger.info(f"Usando metadata grouped_ext.json para filtrar archivos OCR.")
     except Exception as e:
-        logger.error(f"Error accediendo a Storage Account: {e}")
+        logger.error(f"Metadata no disponible.")
 
-    for file_path in paths:    
-        group, ext = classify_file_by_extension(file_path)
-        
-        # Filtrar estrictamente solo imágenes o textuales
-        if group not in ("textual", "images") or ext in ("txt"):
-            logger.info(f"Ignorando '{file_path}' (Grupo: {group}). No soportado nativamente para OCR.")
-            continue
-            
-        # Si pasó el filtro de arriba, significa que SÍ es válido para OCR
-        results_summary[ext].append(file_path)
+    for paths in paths_for_ocr.values():
+        for path in paths:
+            group, ext = classify_file_by_extension(path)
+            if ext not in "txt":       
+                logger.info(f"Ruta '{path}' del grupo: {group}, soportado para OCR.")
+                # Si pasó el filtro de arriba, significa que SÍ es válido para OCR
+                results_summary[ext].append(path)
+                continue
 
-        with open("results_summary.json", "w") as f:
-            f.write(json.dumps(dict(results_summary), indent=2))
+    with open("results_summary.json", "w") as f:
+        f.write(json.dumps(dict(results_summary), indent=2))
 
     return dict(results_summary)
 
@@ -143,6 +148,6 @@ def model_selection():
 
 if __name__ == "__main__":
     configure_logging()
-    result_summary = requires_document_intelligence(directory=DEFAULT_DIRECTORY)
+    result_summary = requires_document_intelligence(directory="")
     results = process_ocr_files(ocr_paths=result_summary)
     logger.info(results)
