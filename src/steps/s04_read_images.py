@@ -1,21 +1,18 @@
 # Databricks notebook source
-from src.infrastructure.connections import DocumentIntelligenceConnection, StorageAccount
+from src.infrastructure.connections import DocumentIntelligenceConnection, DBFSMountPoint
 from src.utils.app_logger import get_logger, configure_logging
 from config.settings import settings
 from src.core.models import AnalyzedDocument
 import json, re, os
 from typing import Optional
 
-# ========== CARGA DE SETTINGS ==========
-STEP_NAME = "s04_read_images"
-
+# ============= CARGA DE SETTINGS =================
+STEP_NAME = "s04 - Lectura de imágenes."
+CONTAINER = "azstapropdev"
+MEDALLION = "bronze"
 IMAGE_EXTENSIONS = re.compile(r"\.(png|jpg|jpeg|tiff)$", re.IGNORECASE)
 
-st_account = StorageAccount(
-    account_name=settings.azure_storage_account_name,
-    account_key=settings.azure_storage_account_key,
-)
-
+st_account = DBFSMountPoint(container=CONTAINER, medallion=MEDALLION)
 di_client = DocumentIntelligenceConnection(
     endpoint=settings.azure_document_intelligence_endpoint,
     key=settings.azure_document_intelligence_key,
@@ -25,11 +22,16 @@ with open("./azpocdk/grouped_paths.json", "r") as f:
     data = json.load(f)
 
 # ========== LOGICA PRINCIPAL ==========
-
+def opening_metadata(helper_file: str = "grouped_paths.json") -> Dict[str, List[str]]:
+    """Abre el archivo de metadatos."""
+    helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
+    full_path = os.path.join(helpers_path, helper_file)
+    with open(full_path, "r") as f:
+        data = json.load(f)
+    return data
 
 def load_image_files(
-    container: str = "bronce",
-    timeout: int = 60,
+    data: Dict[str, List[str]] = None,
     sorted_by_size: bool = False,
     limit: Optional[int] = None,
 ) -> dict[str, bytes]:
@@ -44,17 +46,19 @@ def load_image_files(
     Returns:
         Diccionario ``{ruta_archivo: bytes_contenido}``.
     """
+    if data is None:
+        data = opening_metadata()
     image_paths: list[str] = data.get("images", [])
 
     if not image_paths:
-        logger.warning("⚠️ No se encontraron imágenes en grouped_paths.json")
+        logger.warning("⚠️ No se encontraron imágenes en el repositorio.")
         return {}
 
     if sorted_by_size:
         logger.info("⌚ Ordenando imágenes por tamaño...")
         image_paths = sorted(
             image_paths,
-            key=lambda x: st_account.get_file_size(container=container, file_path=x),
+            key=lambda x: st_account.get_file_size(directory=x),
         )
 
     if limit:
@@ -65,9 +69,7 @@ def load_image_files(
     for file_path in image_paths:
         if IMAGE_EXTENSIONS.search(file_path):
             logger.info(f"👁️ Descargando imagen: {file_path}")
-            content = st_account.read_file(
-                container=container, file_path=file_path, timeout=timeout
-            )
+            content = st_account.read_file(directory=file_path)
             if content:
                 image_collection[file_path] = content
                 logger.info(
