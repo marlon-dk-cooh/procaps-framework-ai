@@ -9,17 +9,21 @@ import chardet, json, re, io, sys
 # ========== CARGA DE SETTINGS ==========
 STEP_NAME = "s03_tabular_processing"
 CONTAINER = "bronze"
-DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
 csv = r"\.csv$"
 xlsx = r"\.xlsx$"
 xls = r"\.xls$"
 
-st_account = DBFSMountPoint()
-
-with open("./helpers/grouped_paths.json", "r") as f:
-    data = json.load(f)
+st_account = DBFSMountPoint(container=CONTAINER, medallion=MEDALLION)
 
 # ========== LOGICA PRINCIPAL ==========
+
+def opening_metadata(helper_file: str = "grouped_paths.json") -> Dict[str, List[str]]:
+    """Abre el archivo de metadatos."""
+    helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
+    helper_file = helpers_path + "/" + helper_file
+    with open(helper_file, "r") as f:
+        data = json.load(f)
+    return data
 
 def load_csv_files(size_limit: float = None, **kwargs):
     """Carga archivos csv desde el Storage Account."""

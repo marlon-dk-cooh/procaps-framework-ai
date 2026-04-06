@@ -1,10 +1,4 @@
 # Databricks notebook source
-helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
-dbfs_root_files = dbutils.fs.ls("file:" + helpers_path)
-display(dbfs_root_files)
-
-# COMMAND ----------
-
 import json
 from typing import List, Dict
 from dataclasses import asdict
@@ -28,27 +22,31 @@ doc_intel = DocumentIntelligenceConnection(
 )
 
 # ================ LOGICA PRINCIPAL ==================
+def opening_metadata(helper_file: str = "grouped_ext.json") -> Dict[str, List[str]]:
+    """Abre el archivo de metadatos."""
+    helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
+    helper_file = helpers_path + "/" + helper_file
+    with open(helper_file, "r") as f:
+        data = json.load(f)
+    return data
 
-def requires_document_intelligence(directory: str, st_account: DBFSMountPoint = storage):
+def requires_document_intelligence(helper_data: Dict[str, List[str]]) -> Dict[str, List[str]]:
     """Define si es necesario realizar lectura por OCR a archivos
     
     Args:
-        paths: Lista con las rutas a verificar.
-        `ej: ["raw/invoices/invoice_001.pdf", "raw/invoices/invoice_002.pdf"]`
+        helper_data: Diccionario con las rutas a verificar.
+        `ej: {"raw/invoices/invoice_001.pdf": "raw/invoices/invoice_002.pdf"}`
         
     Returns:
         Dict mapeando la ruta original de archivo evaluado al archivo _analyzed.json guardado.
         `ej: {"raw/invoices/invoice_001.pdf": "raw/invoices/invoice_001_analyzed.json"}`
     """
-    
     results_summary = defaultdict(list)
     try:
-        with open(helpers_path + "/grouped_ext.json", "r") as f:
-            grouped_ext = json.load(f)
-            paths_for_ocr = {group:path for group, path in grouped_ext.items() if group in ("textual", "images")}
-        logger.info(f"Usando metadata grouped_ext.json para filtrar archivos OCR.")
+        paths_for_ocr = {group:path for group, path in helper_data.items() if group in ("textual", "images")}
+        logger.info("Usando metadata grouped_ext.json para filtrar archivos OCR.")
     except Exception as e:
-        logger.error(f"Metadata no disponible.")
+        logger.error(f"Metadata no disponible. {e}")
 
     for paths in paths_for_ocr.values():
         for path in paths:
@@ -57,7 +55,6 @@ def requires_document_intelligence(directory: str, st_account: DBFSMountPoint = 
                 logger.info(f"Ruta '{path}' del grupo: {group}, soportado para OCR.")
                 # Si pasó el filtro de arriba, significa que SÍ es válido para OCR
                 results_summary[ext].append(path)
-                continue
 
     with open("results_summary.json", "w") as f:
         f.write(json.dumps(dict(results_summary), indent=2))
@@ -148,6 +145,6 @@ def model_selection():
 
 if __name__ == "__main__":
     configure_logging()
-    result_summary = requires_document_intelligence(directory="")
+    result_summary = requires_document_intelligence(helper_data=opening_metadata())
     results = process_ocr_files(ocr_paths=result_summary)
     logger.info(results)

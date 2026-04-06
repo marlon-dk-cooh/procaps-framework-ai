@@ -10,17 +10,19 @@ import concurrent.futures, json, re, io, sys
 STEP_NAME = "s02 - Procesamiento de datos estructurados."
 CONTAINER = "azstapropdev"
 MEDALLION = "bronze"
-DEFAULT_DIRECTORY = f"{CONTAINER}/{MEDALLION}"
 
-st_account = DBFSMountPoint(container=DEFAULT_DIRECTORY)
+st_account = DBFSMountPoint(container=CONTAINER, medallion=MEDALLION)
 parquet = r"\.parquet$"
 json_re = r"\.json$"
 
-# Asistente de metadatos. (Tiene que estar en Cosmos!)
-with open("./helpers/grouped_paths.json", "r") as f:
-    data = json.load(f)
-
 # ================ LÓGICA PRINCIPAL ==================
+def opening_metadata(helper_file: str = "grouped_paths.json"):
+    """Abre el archivo de metadatos."""
+    helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
+    helper_file = helpers_path + "/" + helper_file
+    with open(helper_file, "r") as f:
+        data = json.load(f)
+    return data
 
 def load_parquet_files(size_limit: int = None, **kwargs):
     """
