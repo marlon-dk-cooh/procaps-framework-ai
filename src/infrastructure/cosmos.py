@@ -107,10 +107,6 @@ class CosmosDB:
         )
         return result
 
-    # ------------------------------------------------------------------
-    # Lectura
-    # ------------------------------------------------------------------
-
     async def get_metadata(
         self, storage_account: str
     ) -> Optional[Dict[str, Any]]:
@@ -125,7 +121,7 @@ class CosmosDB:
         try:
             item = await self._container.read_item(
                 item=storage_account,
-                partition_key=storage_account,
+                partition_key=PARTITION_KEY_PATH,
             )
             return item
         except CosmosResourceNotFoundError:
@@ -185,10 +181,6 @@ class CosmosDB:
 
         medallion_data = doc.get(medallion, {})
         return medallion_data.get("file_sizes", {})
-
-    # ------------------------------------------------------------------
-    # Utilidades
-    # ------------------------------------------------------------------
 
     async def ensure_container(self) -> None:
         """Crea el contenedor si no existe (idempotente).
