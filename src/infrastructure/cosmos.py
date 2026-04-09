@@ -16,7 +16,7 @@ from src.core.file_helpers import (
 logger = get_logger(__name__)
 
 # Partition key path usada al crear o consultar el contenedor.
-PARTITION_KEY_PATH = "/partition_key"
+PARTITION_KEY_PATH = "/id"
 
 def build_metadata_document(
     container: str,
