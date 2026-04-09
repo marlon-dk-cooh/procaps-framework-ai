@@ -361,14 +361,14 @@ class DocumentIntelligenceConnection:
         logger.info("DocumentIntelligenceConnection initialized.")
 
     def analyze_document_from_stream(
-        self, document: bytes, file_type: str, model: str = "prebuilt-read"
+        self, document: bytes, file_type: str, model: str = "prebuilt-layout"
     ) -> "AnalyzedDocument":
         """Analyze a document from raw bytes.
 
         Args:
             document: Raw file content bytes.
             file_type: Original file extension (e.g., "pdf").
-            model: The DI model to use. Defaults to "prebuilt-read".
+            model: The DI model to use. Defaults to "prebuilt-layout".
 
         Returns:
             An AnalyzedDocument holding the structured extraction results.
@@ -380,14 +380,14 @@ class DocumentIntelligenceConnection:
         return self._build_result(result, file_type)
 
     def analyze_document_from_url(
-        self, document_url: str, file_type: str, model: str = "prebuilt-read"
+        self, document_url: str, file_type: str, model: str = "prebuilt-layout"
     ) -> "AnalyzedDocument":
         """Analyze a document from a public URL.
 
         Args:
             document_url: The public URL of the document.
             file_type: Expected file extension (e.g., "pdf").
-            model: The DI model to use. Defaults to "prebuilt-read".
+            model: The DI model to use. Defaults to "prebuilt-layout".
 
         Returns:
             An AnalyzedDocument holding the structured extraction results.

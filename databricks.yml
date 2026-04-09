@@ -13,7 +13,7 @@ sync:
     - requirements.txt
 
 variables:
-  existing_cluster_id: 
+  existing_cluster_id:
     description: ""
     default: "0330-135329-abkt38v6"
 
@@ -28,7 +28,7 @@ targets:
       user_name: "marlon.marin@dataknow.co"
     variables:
       existing_cluster_id: "0330-135329-abkt38v6"
-  
+
 resources:
   jobs:
     index_workflow_job:
@@ -50,6 +50,8 @@ resources:
                 package: "numpy>=2.4.3"
             - pypi:
                 package: "pydantic-settings>=2.13.1"
+            - pypi:
+                package: "pypdf>=5.0.0"
           notebook_task:
             notebook_path: "./src/steps/s00_load_files.py"
 

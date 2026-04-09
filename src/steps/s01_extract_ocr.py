@@ -1,10 +1,13 @@
 # Databricks notebook source
+
+import io
 import json
 from typing import List, Dict
 from dataclasses import asdict
 from collections import defaultdict
-
+from pypdf import PdfReader, PdfWriter
 from config.settings import settings
+from src.core.models import AnalyzedDocument
 from src.infrastructure.connections import DBFSMountPoint, DocumentIntelligenceConnection
 from src.utils.app_logger import get_logger, configure_logging
 from src.core.file_helpers import classify_file_by_extension
@@ -61,21 +64,22 @@ def requires_document_intelligence(helper_data: Dict[str, List[str]]) -> Dict[st
 
     return dict(results_summary)
 
-def process_ocr_files(
+def process_with_ocr(
     ocr_paths: Dict[str, List[str]], 
     st_account: DBFSMountPoint = storage,
     doc_intel: DocumentIntelligenceConnection = doc_intel,
     max_pages_per_request: int = 2000
 ) -> Dict[str, any]:
 
-    """Lee cada archivo desde ADLS, verifica el número de páginas y procesa a través de Document Intelligence.
-    Si un documento excede las 2000 páginas, se marca para procesamiento por lotes.
+    """Lee cada archivo desde ADLS y extrae todo el contenido del texto.
 
     Args:
         ocr_paths: Diccionario con las rutas de los archivos a procesar.
             e.g. {"pdf": ["path/to/doc1.pdf", ...], "png": ["path/to/img.png"]}
-        container: Nombre del contenedor de ADLS.
-    
+        st_account: Instancia de DBFSMountPoint.
+        doc_intel: Instancia de DocumentIntelligenceConnection.
+        max_pages_per_request: Número máximo de páginas por solicitud.
+        
     Returns:
         Diccionario con los resultados del procesamiento.
     """
@@ -99,25 +103,47 @@ def process_ocr_files(
                 if page_count > max_pages_per_request:
                     logger.warning(
                         f"⚠️ {file_path} tiene {page_count} paginas (excede {max_pages_per_request}). "
-                        f"Procesamiento por batches requerido!."
+                        f"Iniciando procesamiento por batches."
                     )
-                    # Archivos que deben ser procesados por lotes.
-                    results[file_path] = {
-                        "status": "pending_batch",
-                        "pages": page_count,
-                        "batches_needed": (page_count // max_pages_per_request) + 1,
-                    }
+                    analyzed = batch_processing(
+                        file_path=file_path,
+                        file_bytes=file_bytes,
+                        doc_intel=doc_intel,
+                        max_pages_per_request=max_pages_per_request,
+                    )
                 else:
                     logger.info(f"✅ Procesando {file_path}...")
                     analyzed = doc_intel.analyze_document_from_stream(
                         document=file_bytes,
                         file_type=ext,
-                        model="prebuilt-read"
                     )
+
+                # Fallback a batch si el resultado vino vacío (None o 0 páginas).
+                if analyzed is None or analyzed.pages == 0:
+                    logger.warning(
+                        f"⚠️ Resultado vacío para {file_path}. Reintentando via batch_processing."
+                    )
+                    analyzed = batch_processing(
+                        file_path=file_path,
+                        file_bytes=file_bytes,
+                        doc_intel=doc_intel,
+                        max_pages_per_request=max_pages_per_request,
+                    )
+
+                if analyzed is not None:
                     results[file_path] = {
+                        "path": file_path,
+                        "analyzed_document": analyzed,
                         "status": "completed",
-                        "pages": page_count,
+                        "pages": analyzed.pages,
                         "content_length": len(analyzed.content),
+                    }
+                else:
+                    results[file_path] = {
+                        "path": file_path,
+                        "analyzed_document": None,
+                        "status": "error",
+                        "error": "batch_processing returned None — todos los batches fallaron.",
                     }
 
             except Exception as e:
@@ -127,20 +153,109 @@ def process_ocr_files(
     return results
 
 def batch_processing(
-    file_path: str, 
-    st_account: DBFSMountPoint = storage, 
+    file_path: str,
+    file_bytes: bytes,
     doc_intel: DocumentIntelligenceConnection = doc_intel,
-    max_pages_per_request: int = 2000
-):
-    # #TODO: Implementar logica de procesamiento por lotes.
-    # Dividir el documento en trozos de MAX_PAGES_PER_REQUEST paginas,
-    # enviar cada trozo a doc_intel.analyze_document_from_stream(),
-    # y fusionar los resultados de AnalyzedDocument.
-    pass
+    max_pages_per_request: int = 2000,
+) -> AnalyzedDocument | None:
+    """Procesa un documento grande dividiéndolo en batches de páginas.
 
-# #TODO: How is the file being read, is the model correct?
-def model_selection():
-    pass
+    Divide el PDF en fragmentos de ``max_pages_per_request`` páginas usando
+    ``pypdf``, envía cada fragmento a Document Intelligence de forma
+    secuencial y fusiona todos los ``AnalyzedDocument`` resultantes en uno
+    único. Compatible con el límite de 2.000 páginas / 500 MB de la API.
+
+    Args:
+        file_path: Ruta del archivo (usada solo para logging y extensión).
+        file_bytes: Contenido raw del PDF en bytes.
+        doc_intel: Instancia de DocumentIntelligenceConnection.
+        max_pages_per_request: Tamaño máximo de cada batch en páginas.
+
+    Returns:
+        ``AnalyzedDocument`` fusionado con todos los batches, o
+        ``None`` si todos los batches fallan.
+    """
+    ext = file_path.rsplit(".", 1)[-1].lower()
+
+    # Lectura con PyPDF
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+        total_pages = len(reader.pages)
+    except Exception as e:
+        logger.error("❌ No se pudo leer el PDF %s con pypdf: %s", file_path, e)
+        return None
+
+    # Calculo de rangos de batch
+    ranges = [
+        (start, min(start + max_pages_per_request, total_pages))
+        for start in range(0, total_pages, max_pages_per_request)
+    ]
+    logger.info(
+        "📦 %s → %d páginas divididas en %d batch(es).",
+        file_path, total_pages, len(ranges),
+    )
+
+    # -- 3. Procesar cada batch ---------------------------------------------
+    partial_results: list[AnalyzedDocument] = []
+
+    for batch_num, (start, end) in enumerate(ranges, start=1):
+        logger.info(
+            "🔄 Batch %d/%d: páginas %d–%d de %s",
+            batch_num, len(ranges), start + 1, end, file_path,
+        )
+
+        # Serializar el fragmento de páginas a bytes en memoria
+        writer = PdfWriter()
+        for page_idx in range(start, end):
+            writer.add_page(reader.pages[page_idx])
+
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        chunk_bytes = buffer.getvalue()
+
+        try:
+            partial = doc_intel.analyze_document_from_stream(
+                document=chunk_bytes,
+                file_type=ext,
+            )
+            partial_results.append(partial)
+            logger.info(
+                "✅ Batch %d completado: %d páginas, %d chars.",
+                batch_num, partial.pages, len(partial.content),
+            )
+        except Exception as e:
+            logger.error(
+                "❌ Batch %d falló para %s: %s", batch_num, file_path, e
+            )
+            # Continúa con el siguiente batch en lugar de abortar.
+
+    if not partial_results:
+        logger.error("❌ Todos los batches fallaron para %s.", file_path)
+        return None
+
+    # Fusión de chunks.
+    merged = AnalyzedDocument(
+        content="\n".join(r.content for r in partial_results),
+        pages=sum(r.pages for r in partial_results),
+        file_type=ext,
+        paragraphs=[p for r in partial_results for p in r.paragraphs],
+        tables=[t for r in partial_results for t in r.tables],
+        metadata=partial_results[0].metadata,  # metadatos del primer batch
+    )
+    logger.info(
+        "🏁 Fusión completada para %s: %d páginas totales, %d chars.",
+        file_path, merged.pages, len(merged.content),
+    )
+    return merged
+
+def generate_analyzed_document(analyzed: AnalyzedDocument) -> Dict[str, any]:
+    """Genera un diccionario con los resultados del procesamiento."""
+    
+
+def save_results(results: Dict[str, any]):
+    """Guarda los resultados del procesamiento en un archivo JSON."""
+    with open("results.json", "w") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":
