@@ -4,7 +4,7 @@ from src.utils.app_logger import get_logger, configure_logging
 from config.settings import settings
 from src.core.models import AnalyzedDocument
 import json, re, os
-from typing import Optional
+from typing import Dict, List, Optional
 
 # ============= CARGA DE SETTINGS =================
 STEP_NAME = "s04 - Lectura de imágenes."
@@ -18,12 +18,11 @@ di_client = DocumentIntelligenceConnection(
     key=settings.azure_document_intelligence_key,
 )
 
-with open("./azpocdk/grouped_paths.json", "r") as f:
-    data = json.load(f)
 
-# ========== LOGICA PRINCIPAL ==========
+# ============ LOGICA PRINCIPAL ====================
 def opening_metadata(helper_file: str = "grouped_paths.json") -> Dict[str, List[str]]:
     """Abre el archivo de metadatos."""
+    # #TODO: Cambiar este helpers por los contenedores en Cosmos.
     helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
     full_path = os.path.join(helpers_path, helper_file)
     with open(full_path, "r") as f:
@@ -187,14 +186,10 @@ if __name__ == "__main__":
 
     logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
 
-    # 1. Descargar imágenes desde Storage
     image_collection = load_image_files(sorted_by_size=True, limit=5)
 
-    # 2. Analizar cada imagen con Document Intelligence
     if image_collection:
         results = analyze_all_images(image_collection)
-
-        # 3. Mostrar resumen de resultados
         for path, doc in results.items():
             logger.info(
                 f"\n--- Resultado: {path} ---\n"
@@ -203,7 +198,6 @@ if __name__ == "__main__":
                 f"  Metadata: {doc.metadata}"
             )
 
-        # 4. Exportar resultados a JSON
         export_results(results)
     else:
         logger.warning("⚠️ No hay imágenes para analizar.")

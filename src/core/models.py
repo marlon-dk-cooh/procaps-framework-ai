@@ -22,3 +22,24 @@ class AnalyzedDocument:
     paragraphs: list[str] = field(default_factory=list)
     tables: list[list[list[str]]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class EmbeddingRecord:
+    """Registro normalizado listo para embedding, producido por s05_process_files.
+
+    Cada instancia representa un único documento procesado por el pipeline,
+    independientemente de su tipo de origen (OCR, tabular, imagen, etc.).
+
+    Attributes:
+        id: UUID-5 determinístico derivado de ``origin`` (idempotente entre reruns).
+        origin: Ruta original del archivo en el Data Lake / DBFS.
+        content: Texto extraído o datos serializados como string.
+        metadata: Blob de metadatos serializado como JSON string.
+        update_at: Timestamp ISO-8601 de cuándo se generó el registro.
+    """
+    id: str
+    origin: str
+    content: str
+    metadata: str          # JSON string
+    update_at: str         # ISO 8601

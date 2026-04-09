@@ -101,6 +101,15 @@ class Settings(BaseSettings):
     azure_cosmos_database: str = ""
     azure_cosmos_container: str = ""
 
+    # Azure AI Search.
+    azure_search_endpoint: str = ""
+    azure_search_key: str = ""
+    azure_search_index: str = "procaps-index"
+
+    # OpenAI Embeddings (separate deployment from chat model).
+    azure_openai_embeddings_endpoint: str = ""
+    azure_openai_embeddings_model: str = "text-embedding-3-large"
+
     class Config:
         env_file = ".env"
         case_sensitive = False

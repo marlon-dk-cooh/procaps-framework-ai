@@ -7,6 +7,18 @@ from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
 from azure.core.credentials import AzureKeyCredential
 from azure.storage.filedatalake import DataLakeServiceClient
+from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    SearchIndex,
+    SearchField,
+    SearchFieldDataType,
+    SearchableField,
+    SimpleField,
+    VectorSearch,
+    HnswAlgorithmConfiguration,
+    VectorSearchProfile,
+)
 from src.core.models import AnalyzedDocument
 from src.utils.app_logger import configure_logging, get_logger
 
@@ -536,9 +548,144 @@ class StorageAccount:
                 logger.info("Directorio %s creado correctamente.", output_path)
         except Exception as e:
             logger.error(f"Error al crear el directorio {output_path} en el contenedor {container}: {e}")
-        
-        
 
-            
 
-        
+class AzureSearchConnection:
+    """Client para gestión de índices y documentos en Azure AI Search.
+
+    Encapsula la creación de índices con soporte vectorial (HNSW) y
+    la subida de documentos en batches usando upsert (merge_or_upload).
+
+    Args:
+        endpoint: URL del servicio Azure AI Search.
+        key: Clave de administración del servicio.
+        index_name: Nombre del índice a crear/usar.
+    """
+
+    ALGORITHM_NAME = "hnsw-config"
+    PROFILE_NAME = "vector-profile"
+
+    def __init__(self, endpoint: str, key: str, index_name: str):
+        self._credential = AzureKeyCredential(key)
+        self._endpoint = endpoint
+        self.index_name = index_name
+        self._index_client = SearchIndexClient(endpoint, self._credential)
+        self._search_client = SearchClient(endpoint, index_name, self._credential)
+        logger.info(
+            "AzureSearchConnection inicializado: endpoint=%s, index=%s",
+            endpoint, index_name,
+        )
+
+    def create_or_update_index(self, vector_dimensions: int = 3072) -> None:
+        """Crea o actualiza el índice con soporte de búsqueda vectorial.
+
+        Esquema del índice:
+            - ``id`` — clave primaria, filtrable.
+            - ``origin`` — ruta original, searchable y filtrable.
+            - ``content`` — texto completo, searchable.
+            - ``metadata`` — JSON string, searchable.
+            - ``update_at`` — timestamp ISO-8601, filtrable y sortable.
+            - ``contentVector`` — vector HNSW, coseno.
+
+        Args:
+            vector_dimensions: Dimensiones del vector de embedding.
+                Default: 3072 (text-embedding-3-large).
+        """
+        vector_search = VectorSearch(
+            algorithms=[
+                HnswAlgorithmConfiguration(name=self.ALGORITHM_NAME),
+            ],
+            profiles=[
+                VectorSearchProfile(
+                    name=self.PROFILE_NAME,
+                    algorithm_configuration_name=self.ALGORITHM_NAME,
+                ),
+            ],
+        )
+
+        fields = [
+            SimpleField(
+                name="id", type=SearchFieldDataType.String,
+                key=True, filterable=True,
+            ),
+            SearchableField(
+                name="origin", type=SearchFieldDataType.String,
+                filterable=True,
+            ),
+            SearchableField(
+                name="content", type=SearchFieldDataType.String,
+            ),
+            SearchableField(
+                name="metadata", type=SearchFieldDataType.String,
+            ),
+            SimpleField(
+                name="update_at", type=SearchFieldDataType.String,
+                filterable=True, sortable=True,
+            ),
+            SearchField(
+                name="contentVector",
+                type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                searchable=True,
+                vector_search_dimensions=vector_dimensions,
+                vector_search_profile_name=self.PROFILE_NAME,
+            ),
+        ]
+
+        index = SearchIndex(
+            name=self.index_name,
+            fields=fields,
+            vector_search=vector_search,
+        )
+
+        self._index_client.create_or_update_index(index)
+        logger.info(
+            "✅ Índice '%s' creado/actualizado (%d dimensiones).",
+            self.index_name, vector_dimensions,
+        )
+
+    def upload_documents(
+        self, documents: List[dict], batch_size: int = 100,
+    ) -> dict:
+        """Sube documentos al índice en batches usando merge_or_upload (upsert).
+
+        Args:
+            documents: Lista de diccionarios con los campos del índice.
+            batch_size: Documentos por batch (max recomendado: 1000).
+
+        Returns:
+            Resumen ``{succeeded: int, failed: int, errors: list}``.
+        """
+        total = len(documents)
+        succeeded = 0
+        failed = 0
+        errors: List[str] = []
+
+        for start in range(0, total, batch_size):
+            batch = documents[start : start + batch_size]
+            batch_num = (start // batch_size) + 1
+            logger.info(
+                "📤 Subiendo batch %d (%d docs, offset %d/%d)...",
+                batch_num, len(batch), start, total,
+            )
+            try:
+                results = self._search_client.merge_or_upload_documents(documents=batch)
+                for r in results:
+                    if r.succeeded:
+                        succeeded += 1
+                    else:
+                        failed += 1
+                        errors.append(f"{r.key}: {r.error_message}")
+                        logger.error(
+                            "❌ Documento %s falló: %s", r.key, r.error_message
+                        )
+            except Exception as e:
+                failed += len(batch)
+                errors.append(f"Batch {batch_num}: {e}")
+                logger.error("❌ Batch %d falló: %s", batch_num, e)
+
+        summary = {"succeeded": succeeded, "failed": failed, "errors": errors}
+        logger.info(
+            "🏁 Upload completado: %d exitosos, %d fallidos de %d total.",
+            succeeded, failed, total,
+        )
+        return summary
