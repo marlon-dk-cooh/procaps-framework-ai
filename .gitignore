@@ -11,6 +11,7 @@ dbfs/
 
 # Databricks config
 .databrickscfg
+files/
 
 # Output files
 *.csv

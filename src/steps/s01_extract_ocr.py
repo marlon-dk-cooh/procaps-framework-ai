@@ -1,6 +1,10 @@
 # Databricks notebook source
+# MAGIC %pip install pypdf>=5.0.0 azure-search-documents>=11.6.0 azure-cosmos>=4.6.0
+# MAGIC %restart_python
 
-import io
+# COMMAND ----------
+
+import io, asyncio
 import json
 from typing import List, Dict
 from dataclasses import asdict
@@ -9,13 +13,18 @@ from pypdf import PdfReader, PdfWriter
 from config.settings import settings
 from src.core.models import AnalyzedDocument
 from src.infrastructure.connections import DBFSMountPoint, DocumentIntelligenceConnection
+from src.infrastructure.cosmos import CosmosDB, get_cosmos_client, get_cosmos_database
 from src.utils.app_logger import get_logger, configure_logging
+from src.utils.async_helpers import run_coro, upload_report
 from src.core.file_helpers import classify_file_by_extension
+
+# COMMAND ----------
 
 # ================ CARGA DE SETTINGS ==================
 STEP_NAME = "s01 - Extracción de datos mediante OCR."
 CONTAINER = "azstapropdev"
 MEDALLION = "bronze"
+DOC_ID    = "meta-id-2026-04-13"
 logger = get_logger(STEP_NAME)
 
 storage = DBFSMountPoint(container=CONTAINER, medallion=MEDALLION)
@@ -24,21 +33,34 @@ doc_intel = DocumentIntelligenceConnection(
     key=settings.azure_document_intelligence_key
 )
 
+# COMMAND ----------
+
 # ================ LOGICA PRINCIPAL ==================
-def opening_metadata(helper_file: str = "grouped_ext.json") -> Dict[str, List[str]]:
-    """Abre el archivo de metadatos."""
-    helpers_path = "/Workspace/Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai/src/steps/helpers"
-    helper_file = helpers_path + "/" + helper_file
-    with open(helper_file, "r") as f:
-        data = json.load(f)
-    return data
+async def opening_metadata(storage_account: str, medallion: str, doc_id: str) -> Dict[str, List[str]]:
+    """Abre el archivo de metadatos desde CosmosDB."""
+    try:
+        cos_client = get_cosmos_client()
+        database = get_cosmos_database(cos_client)
+        cosmos = CosmosDB(
+            db = database,
+            container_name = settings.azure_cosmos_container,
+            doc_id = doc_id
+        )
+        textual_paths = await cosmos.get_paths_by_group(storage_account, medallion, "textual", doc_id)
+        image_paths = await cosmos.get_paths_by_group(storage_account, medallion, "images", doc_id)
+        return {"textual": textual_paths, "images": image_paths}
+    finally:
+        await cos_client.close()
+
+# COMMAND ----------
 
 def requires_document_intelligence(helper_data: Dict[str, List[str]]) -> Dict[str, List[str]]:
     """Define si es necesario realizar lectura por OCR a archivos
     
     Args:
         helper_data: Diccionario con las rutas a verificar.
-        `ej: {"raw/invoices/invoice_001.pdf": "raw/invoices/invoice_002.pdf"}`
+        `ej: {"textual" : ["raw/invoices/invoice_001.pdf", "raw/invoices/invoice_002.pdf"],
+            "images" : ["raw/images/image_001.png", "raw/images/image_002.png"]}`
         
     Returns:
         Dict mapeando la ruta original de archivo evaluado al archivo _analyzed.json guardado.
@@ -59,10 +81,9 @@ def requires_document_intelligence(helper_data: Dict[str, List[str]]) -> Dict[st
                 # Si pasó el filtro de arriba, significa que SÍ es válido para OCR
                 results_summary[ext].append(path)
 
-    with open("results_summary.json", "w") as f:
-        f.write(json.dumps(dict(results_summary), indent=2))
-
     return dict(results_summary)
+
+# COMMAND ----------
 
 def process_with_ocr(
     ocr_paths: Dict[str, List[str]], 
@@ -131,9 +152,22 @@ def process_with_ocr(
                     )
 
                 if analyzed is not None:
+                    try:
+                        # Extract basic filename to use as the JSON target
+                        file_name = file_path.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                        output_path = f"silver/ocr/{file_name}_analyzed.json"
+                        
+                        # Serialize AnalyzedDocument to JSON bytes
+                        payload_bytes = json.dumps(asdict(analyzed), ensure_ascii=False).encode('utf-8')
+                        st_account.write_file(directory=output_path, content=payload_bytes)
+                        logger.info(f"💾 Extracción guardada en ADLS: {output_path}")
+                    except Exception as e:
+                        logger.error(f"❌ Error guardando extracción en DBFS/ADLS para {file_path}: {e}")
+
                     results[file_path] = {
                         "path": file_path,
-                        "analyzed_document": analyzed,
+                        "silver_path": output_path,
+                        "analyzed_document": asdict(analyzed),
                         "status": "completed",
                         "pages": analyzed.pages,
                         "content_length": len(analyzed.content),
@@ -151,6 +185,8 @@ def process_with_ocr(
                 results[file_path] = {"status": "error", "error": str(e)}
 
     return results
+
+# COMMAND ----------
 
 def batch_processing(
     file_path: str,
@@ -248,18 +284,152 @@ def batch_processing(
     )
     return merged
 
-def generate_analyzed_document(analyzed: AnalyzedDocument) -> Dict[str, any]:
-    """Genera un diccionario con los resultados del procesamiento."""
-    
+# COMMAND ----------
 
-def save_results(results: Dict[str, any]):
-    """Guarda los resultados del procesamiento en un archivo JSON."""
-    with open("results.json", "w") as f:
-        json.dump(results, f, indent=2)
+def generate_ocr_report(
+    results: Dict[str, any],
+    container: str = CONTAINER,
+    medallion: str = MEDALLION,
+    doc_id: str | None = None,
+) -> Dict[str, any]:
+    """Genera un documento de reporte para Cosmos a partir de la salida de ``process_with_ocr``.
 
+    Estructura del documento generado::
+
+        {
+            "id": "<doc_id>",
+            "azstapropdev": {
+                "bronze": {
+                    "ocr_results": { <per-file summaries> },
+                    "summary": { totals }
+                }
+            },
+            "updated_at": "<ISO-8601>"
+        }
+
+    Args:
+        results: Diccionario retornado por ``process_with_ocr``.
+        container: Nombre del contenedor de storage.
+        medallion: Capa del datalake.
+        doc_id: ID del documento Cosmos. Si es None se genera automáticamente.
+
+    Returns:
+        Documento listo para ``cosmos.upsert_metadata``.
+    """
+
+                    #     results[file_path] = {
+                    #     "path": file_path,
+                    #     "analyzed_document": analyzed,
+                    #     "status": "completed",
+                    #     "pages": analyzed.pages,
+                    #     "content_length": len(analyzed.content),
+                    # }
+    from datetime import datetime, timezone
+
+    if doc_id is None:
+        doc_id = f"ocr-report-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+
+    # Resumenes por archivo.
+    ocr_results: Dict[str, any] = {}
+    total_pages = 0
+    total_chars = 0
+    succeeded = 0
+    failed = 0
+
+    for file_path, entry in results.items():
+        status = entry.get("status", "unknown")
+
+        if status == "completed":
+            succeeded += 1
+            pages = entry.get("pages", 0)
+            content_length = entry.get("content_length", 0)
+            analyzed: Dict[str, Any] | None = entry.get("analyzed_document")
+
+            total_pages += pages
+            total_chars += content_length
+
+            ocr_results[file_path] = {
+                "status": status,
+                "silver_path": entry.get("silver_path"),
+                "pages": pages,
+                "content_length": content_length,
+                "paragraphs_count": len(analyzed.get("paragraphs", [])),
+                "tables_count": len(analyzed.get("tables", [])),
+                "file_type": analyzed.get("file_type", None),
+                "metadata": analyzed.get("metadata", {}),
+            }
+        else:
+            failed += 1
+            ocr_results[file_path] = {
+                "status": status,
+                "error": entry.get("error", "unknown"),
+            }
+
+    report = {
+        "id": doc_id,
+        container: {
+            medallion: {
+                "ocr_results": ocr_results,
+                "summary": {
+                    "total_files": len(results),
+                    "succeeded": succeeded,
+                    "failed": failed,
+                    "total_pages": total_pages,
+                    "total_chars": total_chars,
+                },
+            }
+        },
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    logger.info(
+        "📋 Reporte OCR generado — archivos: %d, exitosos: %d, fallidos: %d, páginas: %d",
+        len(results), succeeded, failed, total_pages,
+    )
+    return report
+
+# COMMAND ----------
 
 if __name__ == "__main__":
+
+    # Logs
     configure_logging()
-    result_summary = requires_document_intelligence(helper_data=opening_metadata())
-    results = process_ocr_files(ocr_paths=result_summary)
-    logger.info(results)
+
+    # Corutinas
+    helper_data = run_coro(opening_metadata(
+        storage_account=settings.azure_storage_account_name,
+        medallion=MEDALLION,
+        doc_id=DOC_ID
+    ))
+
+# COMMAND ----------
+
+    result_summary = requires_document_intelligence(helper_data=helper_data)
+
+# COMMAND ----------
+
+    # Salida de resultados por procesamiento de OCR.
+    results = process_with_ocr(ocr_paths=result_summary)
+    # Escritura en contenedor "silver" de ADLS.
+    write_operation_instance = DBFSMountPoint(container=CONTAINER, medallion="silver")
+# COMMAND ----------
+
+    write_operation_instance.write_file(directory="ocr", content=json.dumps(results, ensure_ascii=False).encode('utf-8'))
+
+# COMMAND ----------
+
+    # Generar reporte
+    report = generate_ocr_report(results)
+    logger.info(f"✅ Reporte generado {report}")
+
+# COMMAND ----------
+
+    # Subir reporte de metadata a Cosmos.
+    report_to_cosmos = upload_report(
+        doc_id="ocr-report-2026-04-12",
+        container=CONTAINER,
+        medallion=MEDALLION,
+        document=report
+    )
+    run_coro(report_to_cosmos)
+    logger.info("✅ Reporte subido a Cosmos")

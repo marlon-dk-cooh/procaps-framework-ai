@@ -1,33 +1,50 @@
 # Databricks notebook source
-from src.core.file_helpers import (
-    classify_file_by_extension, 
-    group_files_by_extension, 
-    proportion_by_file_group,
-    ext_in_structured, 
-    ext_in_others
+# MAGIC %pip install pypdf>=5.0.0 azure-search-documents>=11.6.0 azure-cosmos>=4.6.0
+# MAGIC %restart_python
+
+# COMMAND ----------
+
+from src.core.file_helpers import classify_file_by_extension
+from src.infrastructure.connections import DBFSMountPoint
+from src.infrastructure.cosmos import (
+    CosmosDB, 
+    build_metadata_document, 
+    get_cosmos_client, 
+    get_cosmos_database
 )
 from src.utils.app_logger import get_logger, configure_logging
-from src.infrastructure.connections import DBFSMountPoint
+from src.utils.async_helpers import run_coro, upload_report
 from config.settings import settings
-import os, re
-import json
+import os, re, json, asyncio
 
 # ================ CARGA DE SETTINGS ==================
+
+# COMMAND ----------
+
 STEP_NAME = "s00 - Carga de datos."
 CONTAINER = "azstapropdev"
 MEDALLION = "bronze"
+
+cos_client = get_cosmos_client()
+database = get_cosmos_database(cos_client)
+
+cosmos = CosmosDB(
+    db = database,
+    container_name = settings.azure_cosmos_container,
+    doc_id = None
+)
 # =====================================================
 
 # ================ LOGICA PRINCIPAL ===================
-def main(container: str, medallion: str, directory: str, **kwargs):
-    # Logs
-    logger = get_logger(STEP_NAME)
-    logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
+
+# COMMAND ----------
+
+def create_metadata(container: str, medallion: str, directory: str):
     
-    # 1. Definir conexiones
+    # Definicion de conexiones a traves de punto de montura.
     storage = DBFSMountPoint(container=container, medallion=medallion)
 
-    # 2. Listar archivos
+    # Listar archivos
     try:
         paths = storage.list_files(directory=directory)
         logger.info(f"Encontrados {len(paths)} archivos en {directory}:")
@@ -35,54 +52,53 @@ def main(container: str, medallion: str, directory: str, **kwargs):
         logger.error(f"Error accediendo a Storage Account: {e}")
         return
 
-    # 3. Procesar cada archivo con classify_file_by_extension y obtener el tamaño.
+    # Procesamiento de cada archivo con classify_file_by_extension y get_file_size para clasificar y obtener el tamaño de cada archivo.
     file_sizes = {}
     for file_path in paths:
         group, ext = classify_file_by_extension(file_path)
         size_file = storage.get_file_size(directory=file_path)
-        file_sizes[file_path] = f"{size_file} kB"
+        file_sizes[file_path] = size_file
         logger.info(f"\n--- Procesando: {file_path} [Grupo: {group}, Extensión: {ext}, Tamaño: {size_file} kB] ---")
-    
-    # Archivos clasificados por extensión
-    grouped_paths = group_files_by_extension(paths) 
-    
-    # Porcentaje de archivos por grupo
-    percent_group = proportion_by_file_group(paths)
 
-    # Extensiones en la categoria de "structured", segun la clasificacion en FILE_GROUPS.
-    ext_struc_paths = ext_in_structured(grouped_paths)
+    # Creacion de documento para subir a instancia de Cosmos.
+    new_document = build_metadata_document(
+        doc_id=cosmos._doc_id,
+        container=container,
+        medallion=medallion,
+        paths=paths,
+        file_sizes=file_sizes
+    )
 
-    # Extensiones en la categoria de "others", segun la clasificacion en FILE_GROUPS.
-    ext_other_paths = ext_in_others(grouped_paths)
+    logger.info(f"Documento creado: {new_document[container]}")
 
-    # Escribir archivos con los resultados (por ahora en local).
-    os.makedirs(kwargs["output_path"], exist_ok=True)
+    return new_document
 
-    if os.path.exists(kwargs["output_path"]):
-        with open(os.path.join(kwargs["output_path"], kwargs["extension_in_others_class"]), "w") as f:
-            f.write(json.dumps(ext_other_paths, indent=2))
-        with open(os.path.join(kwargs["output_path"], kwargs["len_per_group_extension"]), "w") as f:
-            f.write(json.dumps(percent_group, indent=2))
-        with open(os.path.join(kwargs["output_path"], kwargs["grouped_extension"]), "w") as f:
-            f.write(json.dumps(grouped_paths, indent=4))
-        with open(os.path.join(kwargs["output_path"], kwargs["extension_in_structured_class"]), "w") as f:
-            f.write(json.dumps(ext_struc_paths, indent=2))
-        with open(os.path.join(kwargs["output_path"], kwargs["file_sizes"]), "w") as f:
-            f.write(json.dumps(file_sizes, indent=2))
+# COMMAND ----------
 
 if __name__ == "__main__":
     # Logs
     configure_logging()
-    # Datalake Procaps
-    paths = main(
-            container=CONTAINER,
-            medallion=MEDALLION,
-            directory="",
-            output_path="./helpers", 
-            extension_in_others_class="others_ext.json", 
-            len_per_group_extension="len_per_group.json", 
-            grouped_extension="grouped_ext.json",
-            extension_in_structured_class="structured_ext.json",
-            file_sizes="file_sizes.json"
+    logger = get_logger(STEP_NAME)
+    logger.info(f"--- Iniciando paso: {STEP_NAME} ---")
+
+# COMMAND ----------
+
+    metadata = create_metadata(
+        container=CONTAINER,
+        medallion=MEDALLION,
+        directory=""
     )
 
+# COMMAND ----------
+
+    # Subiendo metadatos a CosmosDB.
+    run_coro(
+        upload_report(
+            container=settings.azure_storage_account_name,
+            medallion=MEDALLION,
+            document=metadata,
+            doc_id=cosmos._doc_id,
+            splittable_key="grouped_path" 
+        )
+    )
+    logger.info(f"Documento creado: {metadata[CONTAINER]}")

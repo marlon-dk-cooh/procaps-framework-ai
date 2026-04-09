@@ -35,11 +35,11 @@ class EmbeddingRecord:
         id: UUID-5 determinístico derivado de ``origin`` (idempotente entre reruns).
         origin: Ruta original del archivo en el Data Lake / DBFS.
         content: Texto extraído o datos serializados como string.
-        metadata: Blob de metadatos serializado como JSON string.
+        metadata: Blob JSON compacto con metadata ligera de trazabilidad.
         update_at: Timestamp ISO-8601 de cuándo se generó el registro.
     """
     id: str
     origin: str
     content: str
     metadata: str          # JSON string
-    update_at: str         # ISO 8601
+    updated_at: str         # ISO 8601

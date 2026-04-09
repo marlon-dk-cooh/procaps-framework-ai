@@ -1,9 +1,6 @@
 bundle:
   name: procaps-framework-ai
 
-# include:
-#   - resources/indexing_workflow.yml
-
 sync:
   include:
     - databricks.yml
@@ -38,20 +35,7 @@ resources:
         - task_key: s00_load_files
           existing_cluster_id: ${var.existing_cluster_id}
           libraries: &common_libraries
-            - pypi:
-                package: "aiohttp>=3.13.3"
-            - pypi:
-                package: "azure-ai-documentintelligence>=1.0.2"
-            - pypi:
-                package: "azure-identity>=1.25.3"
-            - pypi:
-                package: "python-dotenv>=1.0.0"
-            - pypi:
-                package: "numpy>=2.4.3"
-            - pypi:
-                package: "pydantic-settings>=2.13.1"
-            - pypi:
-                package: "pypdf>=5.0.0"
+            - requirements: "requirements.txt"
           notebook_task:
             notebook_path: "./src/steps/s00_load_files.py"
 
@@ -66,6 +50,42 @@ resources:
         - task_key: s02_structured_data_processing
           existing_cluster_id: ${var.existing_cluster_id}
           depends_on:
-            - task_key: s01_extract_ocr
+            - task_key: s00_load_files
+          libraries: *common_libraries
           notebook_task:
             notebook_path: "./src/steps/s02_structured_data_processing.py"
+
+        - task_key: s03_tabular_processing
+          existing_cluster_id: ${var.existing_cluster_id}
+          depends_on:
+            - task_key: s00_load_files
+          libraries: *common_libraries
+          notebook_task:
+            notebook_path: "./src/steps/s03_tabular_processing.py"
+
+        - task_key: s04_read_images
+          existing_cluster_id: ${var.existing_cluster_id}
+          depends_on:
+            - task_key: s00_load_files
+          libraries: *common_libraries
+          notebook_task:
+            notebook_path: "./src/steps/s04_read_images.py"
+
+        - task_key: s05_process_files
+          existing_cluster_id: ${var.existing_cluster_id}
+          depends_on:
+            - task_key: s01_extract_ocr
+            - task_key: s02_structured_data_processing
+            - task_key: s03_tabular_processing
+            - task_key: s04_read_images
+          libraries: *common_libraries
+          notebook_task:
+            notebook_path: "./src/steps/s05_process_files.py"
+
+        - task_key: s06_indexing
+          existing_cluster_id: ${var.existing_cluster_id}
+          depends_on:
+            - task_key: s05_process_files
+          libraries: *common_libraries
+          notebook_task:
+            notebook_path: "./src/steps/s06_indexing.py"

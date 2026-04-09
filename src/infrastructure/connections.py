@@ -46,10 +46,15 @@ class DBFSMountPoint:
         root: str = "dbfs:/mnt",
         container: str | None = None,
         medallion: str | None = None,
+        export_mode: bool = False,
         dbutils=None,
     ):
-        # Normaliza siempre al esquema dbfs:/ que entiende dbutils.fs
-        self.root = self._normalize(root)
+        # En modo export usa la ruta local del driver; de lo contrario normaliza a dbfs:/
+        self.export_mode = export_mode
+        if self.export_mode:
+            self.root = "/dbfs"
+        else:
+            self.root = self._normalize(root)
         self.container = container
         self.medallion = medallion
         self._dbutils = dbutils or self._get_dbutils()
@@ -104,10 +109,10 @@ class DBFSMountPoint:
         Returns:
             Ruta con esquema ``dbfs:/`` lista para dbutils.fs.
         """
-        if self.container is not None:
-            base = f"{self.root}/{self.container}"
-        elif self.container is not None and self.medallion is not None:
+        if self.container is not None and self.medallion is not None:
             base = f"{self.root}/{self.container}/{self.medallion}"
+        elif self.container is not None:
+            base = f"{self.root}/{self.container}"
         else:
             base = self.root
 
@@ -226,7 +231,36 @@ class DBFSMountPoint:
                 "Error al obtener tamaño del archivo %s: %s", dbfs_path, e
             )
             return 0.0
+    
+    def write_file(self, directory: str = "", content: bytes = b"") -> None:
+        """Escribe un archivo en el sistema de archivos.
 
+        Args:
+            directory: Ruta relativa al root del archivo.
+
+        Returns:
+            None
+        """
+        try:
+            dbfs_path = self.get_path(directory)
+            local_path = self._to_local(dbfs_path)
+        except Exception as e:
+            logger.error(PATH_ERROR_MSG, e)
+            return None
+
+        try:
+            # Asegurar que el directorio destino existe
+            import os
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            
+            with open(local_path, "wb") as f:
+                f.write(content)
+            logger.info("Se escribieron %d bytes en %s", len(content), local_path)
+            return None
+        except Exception as e:
+            logger.error("Error al escribir el archivo %s: %s", dbfs_path, e)
+            return None
+        
 class MountPoint:
     """Acceso a archivos en punto de montura.
     
@@ -234,15 +268,17 @@ class MountPoint:
         root: Ruta raíz del mount point.
             Ej. ``"/mnt/bronce"`` o ``"./data"``.
         container: Opcional. Nombre del contenedor a usar como subruta base.
+        medallion: Opcional. Capa del datalake (bronze/silver/gold).
     """
 
-    def __init__(self, root: str = "./dbfs/mnt", container: str | None = None):
+    def __init__(self, root: str = "./dbfs", container: str | None = None, medallion: str | None = None):
         self.root = root
         self.container = container
+        self.medallion = medallion
         logger.info("Punto de montura inicializado en: %s", self.root)
 
     def get_path(self, directory: str) -> str:
-        """Construye la ruta absoluta combinando root + path relativo.
+        """Construye la ruta absoluta combinando root [+ container] [+ medallion] + directory.
 
         Args:
             directory: Ruta relativa dentro del mount point.
@@ -250,10 +286,15 @@ class MountPoint:
         Returns:
             Ruta absoluta como string.
         """
-        if self.container is not None:
-            return os.path.join(self.root, self.container) + "/" + directory
+        if self.container is not None and self.medallion is not None:
+            base = os.path.join(self.root, self.container, self.medallion)
+        elif self.container is not None:
+            base = os.path.join(self.root, self.container)
         else:
-            return os.path.join(self.root, directory)
+            base = self.root
+
+        full = os.path.join(base, directory) if directory else base
+        return full.rstrip("/")
 
     def list_files(self, directory: str = "") -> List[str]:
         """Lista recursivamente todos los archivos bajo un directorio.
@@ -374,7 +415,7 @@ class DocumentIntelligenceConnection:
 
     def analyze_document_from_stream(
         self, document: bytes, file_type: str, model: str = "prebuilt-layout"
-    ) -> "AnalyzedDocument":
+    ) -> AnalyzedDocument:
         """Analyze a document from raw bytes.
 
         Args:

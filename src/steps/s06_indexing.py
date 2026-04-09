@@ -33,6 +33,20 @@ CHUNK_OVERLAP_CHARS = 500
 
 # ===================Lógica principal==================
 
+def load_metadata_blob(raw_metadata: Any) -> Dict[str, Any]:
+    """Parse metadata defensively, falling back to an empty dict."""
+    if isinstance(raw_metadata, dict):
+        return raw_metadata
+    if not isinstance(raw_metadata, str) or not raw_metadata.strip():
+        return {}
+
+    try:
+        parsed = json.loads(raw_metadata)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
 def chunk_content(
     text: str,
     max_chars: int = MAX_CHARS_PER_CHUNK,
@@ -91,7 +105,7 @@ def expand_chunks(df: pd.DataFrame) -> pd.DataFrame:
         else:
             chunked_count += 1
             parent_id = row["id"]
-            meta_base = json.loads(row["metadata"])
+            meta_base = load_metadata_blob(row.get("metadata"))
 
             for i, chunk_text in enumerate(chunks):
                 chunk_meta = {

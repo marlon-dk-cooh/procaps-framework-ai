@@ -1,6 +1,7 @@
 """Utilidades para clasificación y agrupación de archivos por extensión."""
 from typing import Tuple
 from collections import defaultdict
+from src.infrastructure.connections import DBFSMountPoint
 import re, json
 
 FILE_GROUPS = {
@@ -146,10 +147,10 @@ def ext_in_others(
 
 
 def filter_by_size(
+    storage_account: DBFSMountPoint,
     paths: list[str],
-    size_limit: float,
-    sizes_path: str = "./azpocdk/file_sizes.json",
-) -> list[str]:
+    size_limit: float
+)-> list[str]:
     """Filtra una lista de rutas de archivos por tamaño máximo en kB.
 
     Lee el ``file_sizes.json`` pre-calculado (generado por
@@ -158,20 +159,14 @@ def filter_by_size(
     verificar su tamaño.
 
     Args:
+        storage_account: DBFSMountPoint del storage account.
         paths: Lista de rutas relativas a filtrar.
         size_limit: Tamaño máximo permitido en kilobytes (kB).
-        sizes_path: Ruta al JSON de metadatos de tamaños.
-            Default: ``"./azpocdk/file_sizes.json"``.
 
     Returns:
         Sub-lista de ``paths`` cuyos archivos cumplen con el límite.
     """
-    with open(sizes_path, "r") as f:
-        sizes: dict = json.load(f)
-
-    allowed = {
-        path
-        for path, value in sizes.items()
-        if float(value.split()[0]) <= size_limit
-    }
-    return [p for p in paths if p in allowed]
+    sizes = [
+        f for f in paths if float(storage_account.get_file_size(directory=f)) <= size_limit
+    ]
+    return sizes
