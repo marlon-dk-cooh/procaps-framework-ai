@@ -1,0 +1,24 @@
+# Manifest del workflow SharePoint → Bronze (Data Lake)
+# Secretos: sharepoint-site-url, sharepoint-client-id, sharepoint-client-secret, sharepoint-relative-path (Key Vault)
+
+workflow:
+  catalog: "main"
+  schema: "sharepoint_schema"
+
+  steps:
+    s00_sharepoint_to_bronze:
+      inputs:
+        - key: "sharepoint_source"
+          type: "container"
+          container_name: "bronze"
+          path_prefix: "sharepoint"
+      outputs:
+        - key: "bronze_mirror"
+          type: "container"
+          container_name: "bronze"
+          path_prefix: "sharepoint"
+      # Parámetros opcionales para SharePointToBronzeProcess.run()
+      options:
+        max_folders: null
+        only_folder: null
+        since_date: null

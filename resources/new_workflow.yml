@@ -1,0 +1,94 @@
+# =============================================================================
+# PLANTILLA: nuevo workflow asíncrono (Databricks Jobs / Asset Bundle)
+# =============================================================================
+# Pasos típicos al usar este archivo:
+#   1) Duplicar y renombrar a <nuevo_caso>_workflow.yml (ej. fraud_workflow.yml).
+#   2) Sustituir "nuevo_caso" en job key, nombre y tags; rutas si copias la carpeta.
+#   3) Partir de config/new_manifest.yaml y src/steps/new_workflow/; renombrar al
+#      copiar (ej. src/steps/mi_caso/) y ajustar --manifest en cada task.
+#   4) Añadir "resources/<nuevo_caso>_workflow.yml" al include: de databricks.yml.
+#   5) En databricks.yml (targets), definir job_clusters para tu job (copia el
+#      bloque de indexing_workflow_job → cluster_dedicado y ajusta el nombre
+#      del job bajo resources.jobs).
+# Este archivo no está incluido en databricks.yml por defecto: es solo plantilla.
+# =============================================================================
+
+resources:
+  jobs:
+    nuevo_caso_workflow_job:
+      name: "${bundle.name}-nuevo_caso_job"
+      description: "Workflow plantilla - reemplazar descripcion - ${var.business_domain}"
+
+      tags:
+        proyecto: "Framework-IA"
+        dominio_negocio: "${var.business_domain}"
+        workflow_type: "nuevo-caso"
+
+      timeout_seconds: 3600
+      max_concurrent_runs: 2
+      queue:
+        enabled: true
+
+      tasks:
+        - task_key: s00_ingestion
+          description: "Paso inicial (ajusta task_key y script)"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/new_workflow/s00_ingestion.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/new_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        - task_key: s01_preprocess
+          depends_on:
+            - task_key: s00_ingestion
+
+          description: "Segundo paso (ejemplo de cadena depends_on)"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/new_workflow/s01_preprocess.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/new_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true

@@ -1,0 +1,7 @@
+variables:
+  project: 'Framework.IA.Workflow' # Nombre del proyecto
+  REPO_NAME: 'Framework.IA.TemplateWorkflow' # Nombre del repositorio
+  PYTHON.VERSION: '3.9' # Versión de Python utilizada
+  UNIT-TEST: 'PYTHONPATH=$PYTHONPATH:$PWD/src pytest tests -v --cov=src --junitxml=junit/test-results.xml --cov-report xml:junit/coverage.xml --cov-report=html:htmlcov' # Comando para ejecutar las pruebas unitarias
+  
+  # System.Debug: true

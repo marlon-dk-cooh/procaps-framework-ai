@@ -1,0 +1,465 @@
+# =============================================================================
+# WORKFLOW JOBS - TEMPLATE ASÍNCRONO (basado en bundles/indexing)
+# Este archivo es el workflow de indexacion.
+# =============================================================================
+
+resources:
+  jobs:
+    indexing_workflow_job:
+      name: "${bundle.name}-indexing_job"
+      description: "Workflow job para procesamiento de IA - ${var.business_domain}"
+
+      tags:
+        proyecto: "Framework-IA"
+        dominio_negocio: "${var.business_domain}"
+
+      timeout_seconds: 7200
+      max_concurrent_runs: 3
+      queue:
+        enabled: true
+
+      tasks:
+        # ==================== TASK 0a: SHAREPOINT → BRONZE (indexing prefix) ====================
+        - task_key: s00_sharepoint
+          description: "SharePoint → ADLS Bronze (mismo prefijo que discovery); no-op si indexing.sharepoint_sync_enabled es false"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s00_sharepoint.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "Office365-REST-Python-Client>=2.5.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 0b: DISCOVERY ====================
+        - task_key: s00_discovery
+          depends_on:
+            - task_key: s00_sharepoint
+
+          description: "Descubrimiento y organización de archivos"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            # Ruta genérica: asume que los steps viven en src/steps
+            python_file: "../src/steps/indexing/s00_discovery.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "openai>=1.0.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 1a: TEXTUAL INGESTION ====================
+        - task_key: s01_textual_ingestion
+          depends_on:
+            - task_key: s00_discovery
+
+          description: "Extracción de texto (PDF, DOCX, TXT, PPTX) y metadatos básicos"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s01_textual.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "azure-ai-formrecognizer>=3.3.0"
+            - pypi:
+                package: "python-docx>=1.1.2"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 1b: VISUAL INGESTION ====================
+        - task_key: s01_visual_ingestion
+          depends_on:
+            - task_key: s00_discovery
+
+          description: "Extracción de metadatos de imágenes"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s01_visual.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "azure-ai-formrecognizer>=3.3.0"
+            - pypi:
+                package: "Pillow==12.1.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 1c: TABULAR INGESTION ====================
+        - task_key: s01_tabular_ingestion
+          depends_on:
+            - task_key: s00_discovery
+
+          description: "Extracción de datos tabulares (CSV, XLSX, XLS) y metadatos"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s01_tabular.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "azure-ai-formrecognizer>=3.3.0"
+            - pypi:
+                package: "openai>=1.0.0"
+            - pypi:
+                package: "openpyxl==3.1.5"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 1d: STRUCTURED INGESTION ====================
+        - task_key: s01_structured_ingestion
+          depends_on:
+            - task_key: s00_discovery
+
+          description: "Extracción de datos estructurados (CSV, XLSX, XLS) y metadatos"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s01_structured.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "pyarrow>=14.0.1"
+            - pypi:
+                package: "openai>=1.0.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 2a: CHUNKING ====================
+        - task_key: s02_chunking
+          depends_on:
+            - task_key: s01_textual_ingestion
+            - task_key: s01_tabular_ingestion
+            - task_key: s01_structured_ingestion
+
+          description: "Chunking y procesamiento de texto"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s02_chunking.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "langchain-text-splitters>=0.2.0"
+            - pypi:
+                package: "langchain-experimental>=0.0.65"
+            - pypi:
+                package: "sentence-transformers>=2.7.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # =================== TASK 2b: IMAGE CAPTIONING ==================
+        - task_key: s02_image_captioning
+          depends_on:
+            - task_key: s01_visual_ingestion
+
+          description: "Generación de captions para imágenes"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s02_image_captioning.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 3: SANITIZATION ===================
+        - task_key: s03_sanitization
+          depends_on:
+            - task_key: s02_chunking
+
+          description: "Sanitización y filtrado de contenido sensible de chunks"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s03_sanitization.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 4: EMBEDDINGS + KEYWORDS ===================
+        - task_key: s04_embeddings_keywords
+          depends_on:
+            - task_key: s01_visual_ingestion
+            - task_key: s02_image_captioning
+            - task_key: s03_sanitization
+
+          description: "Generación de embeddings textuales y keywords por chunk"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s04_embeddings_keywords.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "openai>=1.0.0"
+            - pypi:
+                package: "Pillow==12.1.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 5: INDEXING ====================
+        - task_key: s05_indexing
+          depends_on:
+            - task_key: s04_embeddings_keywords
+
+          description: "Indexación de datos procesados"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s05_indexing.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "azure-search-documents>=11.4.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true
+
+        # ==================== TASK 6: LOG SUMMARY ====================
+        - task_key: s06_log_summary
+          depends_on:
+            - task_key: s05_indexing
+
+          description: "Generación de resumen de ejecución en Gold"
+          job_cluster_key: "cluster_dedicado"
+
+          spark_python_task:
+            python_file: "../src/steps/indexing/s06_log_summary.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/indexing_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+
+          timeout_seconds: 600
+          max_retries: 2
+          retry_on_timeout: true
+

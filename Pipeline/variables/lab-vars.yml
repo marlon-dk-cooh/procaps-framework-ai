@@ -1,0 +1,9 @@
+variables:
+  databricksHost: '<databricks-host>.azuredatabricks.net' # wsdb-<business-domain>-lab
+  keyVaultName: '<key-vault-name>'
+  BUNDLE_TARGET: 'lab'
+  adb_custer_policy_id: "<adb-custer-policy-id>"
+  adb_business_domain: "<adb-business-domain>"
+  adb_node_type_id : "Standard_DS3_v2"
+  ENVIRONMENT_TAG: 'lab' # Entorno de ejecución (dll, lab, prd)
+  

@@ -1,0 +1,39 @@
+# =============================================================================
+# PLANTILLA: manifest de un nuevo workflow (contrato inputs/outputs por step)
+# =============================================================================
+# Debe coincidir con los task_key y scripts de tu resources/<caso>_workflow.yml.
+# Scripts de referencia: src/steps/new_workflow/s00_ingestion.py y s01_preprocess.py.
+# Pasos típicos:
+#   1) Duplicar y renombrar a <tu_caso>_manifest.yaml (ej. fraud_manifest.yaml).
+#   2) Ajustar catalog, schema, container_name, path_prefix y tipos (file/table/...).
+#   3) En el job YAML, el flag --manifest debe apuntar a este archivo.
+# Tipos usados en el repo (referencia): container, volume, file, table, index. 
+# El nombre del step debe ser s00_ingestion, s01_preprocess, etc.
+# =============================================================================
+
+workflow:
+  # TODO: catálogo y esquema Unity Catalog para artefactos de este caso
+  catalog: "main"
+  schema: "nuevo_caso_schema"
+
+  steps:
+    s00_ingestion:
+      inputs:
+        - key: "raw_input"
+          type: "container"
+          container_name: "bronze"
+          path_prefix: "nuevo_caso"
+      outputs:
+        - key: "ingested_data"
+          type: "file"
+          medallion: "silver"
+
+    s01_preprocess:
+      inputs:
+        - from_step: "s00_ingestion"
+          key: "ingested_data"
+          type: "file"
+      outputs:
+        - key: "preprocessed_data"
+          type: "table"
+          medallion: "silver"

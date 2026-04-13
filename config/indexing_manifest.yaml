@@ -1,0 +1,142 @@
+# Contrato lógico del job indexing_workflow_job (--manifest en resources/indexing_workflow.yml).
+workflow:
+  # TODO: reemplazar por el catálogo y esquema de tu entorno
+  catalog: "main"
+  schema: "rag_index"
+
+  steps:
+    # s00_sharepoint: mismos criterios que sharepoint_workflow / sharepoint_manifest (ver docs/configuration.md).
+    # null = no aplicar ese filtro (equivale a omitir la clave).
+    s00_sharepoint:
+      options:
+        max_folders: null # entero > 0: tope de carpetas a recorrer; null = sin límite
+        # Solo esa subcarpeta bajo sharepoint.relative_path; en Bronze no se añade un nivel con ese nombre (contenido bajo destino como si fuera la raíz). null = todas.
+        only_folder: null  # ej. "arqui"
+        # Solo ISO 8601 (fromisoformat). Ej.: "2026-04-10T15:47:00"; no usar "4/10/2026 03:47 PM".
+        since_date: null # Ej.: "2026-04-10T15:47:00"
+
+    s00_discovery:
+      inputs:
+        - key: "raw_documents"
+          # Puede ser un contenedor ADLS o un volumen de Unity Catalog,
+          # depende de cómo implementes tu uploader en s00_discovery.
+          # En el ejemplo original de bundles se usa un contenedor "bronze".
+          type: "container"
+          container_name: "bronze"
+          path_prefix: "indexing"
+      outputs:
+        - key: "discovery_manifest"
+          type: "file"
+          medallion: "silver"
+
+    s01_textual_ingestion:
+      inputs:
+        - from_step: "s00_discovery"
+          key: "staged_files"
+          type: "volume"
+      outputs:
+        - key: "ir_data"
+          type: "table"
+          medallion: "silver"
+
+    s01_visual_ingestion:
+      inputs:
+        - from_step: "s00_discovery"
+          key: "staged_files"
+          type: "volume"
+      outputs:
+        - key: "images_metadata"
+          type: "table"
+          medallion: "silver"
+
+    s01_tabular_ingestion:
+      inputs:
+        - from_step: "s00_discovery"
+          key: "staged_files"
+          type: "volume"
+      outputs:
+        - key: "tabular_data"
+          type: "table"
+          medallion: "silver"
+
+    s01_structured_ingestion:
+      inputs:
+        - from_step: "s00_discovery"
+          key: "staged_files"
+          type: "volume"
+      outputs:
+        - key: "structured_data"
+          type: "table"
+          medallion: "silver"
+
+    s02_chunking:
+      inputs:
+        - from_step: "s01_textual_ingestion"
+          key: "ir_data"
+          type: "table"
+        - from_step: "s01_tabular_ingestion"
+          key: "tabular_data"
+          type: "table"
+        - from_step: "s01_structured_ingestion"
+          key: "structured_data"
+          type: "table"
+      outputs:
+        - key: "chunks_data"
+          type: "table"
+          medallion: "silver"
+
+    s02_image_captioning:
+      inputs:
+        - from_step: "s01_visual_ingestion"
+          key: "images_metadata"
+          type: "table"
+      outputs:
+        - key: "image_captions"
+          type: "table"
+          medallion: "silver"
+
+    s03_sanitization:
+      inputs:
+        - from_step: "s02_chunking"
+          key: "chunks_data"
+          type: "table"
+      outputs:
+        - key: "sanitized_chunks"
+          type: "table"
+          medallion: "silver"
+
+    s04_embeddings_keywords:
+      inputs:
+        - from_step: "s03_sanitization"
+          key: "sanitized_chunks"
+          type: "table"
+        - from_step: "s02_image_captioning"
+          key: "image_captions"
+          type: "table"
+        - from_step: "s01_visual_ingestion"
+          key: "images_metadata"
+          type: "table"
+      outputs:
+        - key: "embeddings_data"
+          type: "table"
+          medallion: "silver"
+
+    s05_indexing:
+      inputs:
+        - from_step: "s04_embeddings_keywords"
+          key: "embeddings_data"
+          type: "table"
+      outputs:
+        - key: "search_index"
+          type: "index"
+
+    s06_log_summary:
+      inputs:
+        - from_step: "s05_indexing"
+          key: "search_index"
+          type: "index"
+      outputs:
+        - key: "run_summary"
+          type: "file"
+          medallion: "gold"
+

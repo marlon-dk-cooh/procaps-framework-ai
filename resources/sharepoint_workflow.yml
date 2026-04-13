@@ -1,0 +1,52 @@
+# =============================================================================
+# WORKFLOW SHAREPOINT → BRONZE (usa src/core/sharepoint/sharepoint_connection.py)
+# =============================================================================
+
+resources:
+  jobs:
+    sharepoint_workflow_job:
+      name: "${bundle.name}-sharepoint_job"
+      description: "Sincronización SharePoint a capa Bronze - ${var.business_domain}"
+
+      tags:
+        proyecto: "Framework-IA"
+        dominio_negocio: "${var.business_domain}"
+        workflow_type: "sharepoint"
+
+      timeout_seconds: 3600
+      max_concurrent_runs: 2
+      queue:
+        enabled: true
+
+      tasks:
+        - task_key: s00_sharepoint_to_bronze
+          description: "Lista carpetas en SharePoint, descarga archivos y sube a ADLS Bronze"
+          job_cluster_key: "cluster_sharepoint"
+
+          spark_python_task:
+            python_file: "../src/steps/sharepoint/s00_sharepoint_to_bronze.py"
+            parameters:
+              - "--config"
+              - "${workspace.file_path}/config/config.yaml"
+              - "--manifest"
+              - "${workspace.file_path}/config/sharepoint_manifest.yaml"
+              - "--run_id"
+              - "{{job.run_id}}"
+              - "--task_run_id"
+              - "{{task.run_id}}"
+
+          libraries:
+            - pypi:
+                package: "PyYAML>=6.0"
+            - pypi:
+                package: "azure-identity>=1.15.0"
+            - pypi:
+                package: "azure-keyvault-secrets>=4.7.0"
+            - pypi:
+                package: "azure-storage-file-datalake>=12.14.0"
+            - pypi:
+                package: "Office365-REST-Python-Client>=2.5.0"
+
+          timeout_seconds: 1800
+          max_retries: 1
+          retry_on_timeout: true

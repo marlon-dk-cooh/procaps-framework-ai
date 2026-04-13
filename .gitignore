@@ -1,18 +1,18 @@
-# Environment
-.env
+.databricks
+CLAUDE.md
+sample_code.yml
+.vscode
+.ruff_cache
+.venv/*
 .venv
-__pycache__
-requirements.txt
-
-# Learning (for tesing purposes)
-learning/
-*.ipynb
-dbfs/
-
-# Databricks config
-.databrickscfg
-files/
-
-# Output files
-*.csv
-*.json
+src/core/__pycache__ 
+src/steps/__pycache__ 
+/FrameworkIA/*
+/bundles/*
+/FrameworkIA/
+/bundles/
+__pycache__/
+*.pyc
+src/steps/indexing/__pycache__/*
+push_secrets_to_kv.sh
+.env

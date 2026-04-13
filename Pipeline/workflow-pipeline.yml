@@ -1,0 +1,39 @@
+trigger:  # Define los eventos que disparan la ejecución del pipeline.
+  branches:  # Configura las ramas que activan o no el pipeline.
+    include:  # Lista de ramas que se incluyen como disparadores.
+    - master  # El pipeline se ejecutará cuando haya cambios en la rama 'mlrag'.
+    exclude:  # Lista de ramas que se excluyen como disparadores.
+    - feature/*  # Excluye todas las ramas que comienzan con 'feature/' (p. ej., feature/nueva-funcionalidad).
+
+pool:  # Especifica el grupo de agentes donde se ejecutará el pipeline.
+  vmImage: ubuntu-latest  # Usa la imagen de máquina virtual más reciente de Ubuntu como entorno de ejecución.
+
+variables:  # Define las variables que se usarán en el pipeline.
+  - group: IAFrameworkV2  #  Referencia a un grupo de variables predefinido en Azure DevOps library llamado 'Framework_IA'.
+  - template: variables/general-vars.yml  # Incluye un archivo de plantilla YAML con variables generales aplicables a todas las ramas.
+  # - ${{ if startsWith(variables['Build.SourceBranch'], 'refs/heads/feature') }}:  # (Comentado) Condición: si la rama comienza con 'feature'.
+  #   - template: variables/dll-vars.yml  # (Comentado) Carga variables de desarrollo desde 'dll-vars.yml' para ramas 'feature'.
+  # - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/testDevOps-master-rag') }}:  # (Comentado) Condición: si la rama es exactamente 'testDevOps-master-rag'.
+  #   - template: variables/dll-vars.yml  # (Comentado) Carga variables de desarrollo desde 'dll-vars.yml'.
+  # - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/Integration') }}:  # (Comentado) Condición: si la rama es exactamente 'Integration'.
+  #   - template: variables/lab-vars.yml  # (Comentado) Carga variables de calidad desde 'lab-vars.yml'.
+  - ${{ if or(startsWith(variables['Build.SourceBranch'], 'refs/heads/feature'), eq(variables['Build.SourceBranch'], 'refs/heads/integration_dev')) }}:  # Condición: si la rama es exactamente 'adb_merge'.
+    - template: variables/lab-vars.yml # Carga variables de laboratorio desde 'lab-vars.yml' para ramas 'feature'.
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/main') }}:
+    - template: variables/prd-vars.yml  # Carga variables de producción desde 'prd-vars.yml' para la rama 'master'.
+
+  - name: 'BROWSERSLIST_IGNORE_OLD_DATA'  # Define una variable específica llamada 'BROWSERSLIST_IGNORE_OLD_DATA'.
+    value: true  # Asigna el valor 'true', indicando que se ignorarán datos antiguos en Browserslist (herramienta para compatibilidad de navegadores).
+
+
+resources:  # Define recursos externos utilizados por el pipeline. Plantilla general
+  repositories:  # Lista de repositorios adicionales que se referencian.
+  - repository: template  # Nombre lógico del repositorio (alias usado en el pipeline: 'template').
+    type: git  # Tipo de repositorio, en este caso Git.
+    name: Tecnologia/PipelineArtifacsTemplete  # Nombre completo del repositorio en el proyecto (Organización/Repositorio).
+    # ref: feature/danny/framework-ia  # Referencia específica del repositorio, en este caso la rama o tag
+    ref: feature/template-cicd-merge
+extends:  # Indica que este pipeline extiende un template existente.
+  template: pipeline-templates-framework-ia2/pipelines/main.yml@template  # Ruta del archivo de plantilla YAML a extender, referenciado desde el repositorio 'template'.
+  parameters:  # Parámetros que se pasan al template extendido.
+      language: 'Databricks' # Especifica el valor 'mlrag' para el parámetro 'language' del template.

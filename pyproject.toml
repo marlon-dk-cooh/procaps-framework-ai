@@ -1,17 +1,5 @@
-[project]
-name = "procaps-framework-ai"
-version = "0.1.0"
-description = "Framework AI para Procaps"
-readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "aiohttp>=3.13.3",
-    "azure-ai-documentintelligence>=1.0.2",
-    "azure-identity>=1.25.3",
-    "python-dotenv>=1.0.0",
-    "numpy>=2.4.3",
-    "pydantic-settings>=2.13.1",
-    "langchain-core>=1.2.21",
-    "langchain-azure-ai[opentelemetry,tools]>=1.1.1",
-    "chardet>=7.4.0.post2",
-]
+[tool.ruff.lint.per-file-ignores]
+# Steps añaden el raíz del proyecto a sys.path antes de importar `src.*` (Databricks / exec sin __file__).
+"src/steps/**/*.py" = ["E402"]
+# `dbutils` lo inyecta el runtime de Databricks; no existe en análisis estático local.
+"src/libraries/setup_libraries.py" = ["F821"]

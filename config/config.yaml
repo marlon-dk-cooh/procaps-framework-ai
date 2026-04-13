@@ -1,0 +1,305 @@
+# ============================================================================
+# GLOBAL SETTINGS
+# ============================================================================
+# Core configuration for the entire pipeline execution
+global_settings:
+  # Deployment environment (dev, staging, prod)
+  environment: "dev"
+  
+  # Unique identifier for this pipeline execution
+  execution_name: "index_pipeline_v2"
+  
+  # Logging verbosity: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  logger_level: "INFO"
+
+# ============================================================================
+# PIPELINE IDENTITY
+# ============================================================================
+pipeline:
+  initiative_name: "Framework_IA"
+  environment: "dll"
+
+# ============================================================================
+# SECRETS MANAGEMENT
+# ============================================================================
+# Configuration for retrieving sensitive credentials
+secrets:
+  # Provider for secret storage (azure_key_vault, aws_secrets_manager, etc.)
+  provider: "azure_key_vault"
+  
+  # Vault URL will be loaded from environment variable AZURE_KEY_VAULT_URL
+  # or from secret_helper defaults if not specified
+
+# ============================================================================
+# LARGE LANGUAGE MODELS (LLMs)
+# ============================================================================
+# Configuration for AI models used in reasoning and text generation
+llms:
+  # Primary model for reasoning tasks (e.g. gpt4_reasoner, gpt4o, gpt4o-mini, etc.)
+  gpt4_reasoner:
+    # Provider for the model (azure_foundry, azure_openai, etc.)
+    provider: "azure_openai"
+    
+    # Azure OpenAI service endpoint (loaded from Key Vault)
+    endpoint: "${KV-AZFoundry-Endpoint}"
+    
+    # API authentication key (loaded from Key Vault)
+    api_key: "${KV-AZFoundry-Key}"
+    
+    # Azure OpenAI API version (e.g., "2024-02-15-preview")
+    api_version: "${KV-AZFoundry-Model-LLM-API-Version}"
+    
+    # Deployment name for the GPT-4 model in Azure OpenAI
+    deployment_name: "${KV-AZFoundry-Model-LLM-Name}"
+    
+    # Temperature controls randomness (0.0 = deterministic, 1.0 = creative)
+    temperature: 0.0
+    
+    # Maximum tokens in the response
+    max_tokens: 2000
+
+# ============================================================================
+# EMBEDDINGS
+# ============================================================================
+# Configuration for vector embeddings used in semantic search.
+# Use the same Azure OpenAI resource (Foundry) as the LLM so one key works for both.
+embeddings:
+  # Large embedding model for high-quality vector representations
+  embeddings_large:
+    provider: "azure_openai"
+    
+    # Azure OpenAI service endpoint (loaded from Key Vault)
+    endpoint: "${KV-AZFoundry-Endpoint}"
+    
+    # API authentication key (loaded from Key Vault)
+    api_key: "${KV-AZFoundry-Key}"
+    
+    # Azure OpenAI API version
+    api_version: "${KV-AZFoundry-Model-Embeddings-API-Version}"
+    
+    # Deployment name for the embeddings model on the same resource (e.g. text-embedding-3-large)
+    deployment_name: "${KV-AZFoundry-Model-Embeddings-Name}"
+    
+    # Number of texts to embed in a single API call (for efficiency)
+    batch_size: 20
+
+  # Keyword extraction for each chunk (used in s04_embeddings_keywords, consumed by search index)
+  keywords:
+    enabled: true
+    # LLM from llms.* used to generate keywords from chunk content
+    llm_key: "gpt4_reasoner"
+    # Maximum number of keywords per chunk
+    max_keywords: 5
+
+# ============================================================================
+# SECURITY - optional
+# ============================================================================
+# Optional security settings: PII detection/redaction in indexing (s03_sanitization); content_safety is for future Azure Content Safety integration (not wired in code yet).
+# Azure AI Language for PII (`provider: azure_language`) runs only when both `security.pii.endpoint` and `security.pii.api_key` are configured; if either is missing, sanitization falls back to regex-based PII detection.
+security:
+  # Personally Identifiable Information (PII) detection
+  pii:
+    # Enable/disable PII detection
+    enabled: false
+    
+    # Provider for PII detection (azure_language for Azure AI Language, or regex for pattern-based) 
+    provider: "azure_language"
+    
+    # Endpoint and key loaded from Key Vault when using azure_language
+    endpoint: 
+
+    # API key loaded from Key Vault when using azure_language
+    api_key: 
+
+  # Content safety filtering (hate speech, violence, self-harm, sexual content)
+  content_safety:
+    # Enable/disable content safety checks
+    enabled: false
+    
+    # Provider for content safety (azure_content_safety uses Azure AI Content Safety)
+    provider: "azure_content_safety"
+
+    # Azure AI Content Safety endpoint (loaded from Key Vault)
+    endpoint: 
+    
+    # Azure AI Content Safety API key (loaded from Key Vault)
+    api_key: 
+
+# ============================================================================
+# VECTOR STORES
+# ============================================================================
+# Configuration for vector databases used in semantic search and retrieval
+vector_stores:
+  # Primary vector database for text embeddings
+  vectordb_text:
+    # Provider for vector storage (azure_search, pinecone, weaviate, etc.)
+    provider: "azure_search"
+    
+    # Azure AI Search service endpoint (loaded from Key Vault)
+    endpoint: "${KV-AZSEARCH-Endpoint}"
+    
+    # Azure AI Search admin API key (loaded from Key Vault)
+    api_key: "${KV-AZSEARCH-Key}"
+    
+    # Name of the search index to use
+    index_name: "${KV-AZSEARCH-index-semantic}"
+    
+    # Dimensionality of embedding vectors (3072 for text-embedding-3-large, 1536 for text-embedding-ada-002)
+    vector_dimensions: 3072
+    
+    # Number of documents to index in a single batch operation
+    batch_size: 10
+
+# ============================================================================
+# DOCUMENT PROCESSING
+# ============================================================================
+# Configuration for how documents are split and processed
+processing:
+  # Text chunking strategy for breaking documents into smaller pieces
+  chunking:
+    # Tipo de chunking por defecto para la mayoría de archivos.
+    # Tipos soportados actualmente en el código:
+    # - fixed_word  -> estrategia por número fijo de palabras
+    # - recursive   -> document aware / recursive character splitter
+    # - character   -> chunking por caracteres con size/overlap
+    # - markdown    -> markdown-aware splitter
+    # - semantic    -> semantic chunking (embeddings + umbral)
+    type_chunking: "semantic"
+    
+    # Overrides por tipo de archivo
+    strategy_overrides:
+      "*.md": "markdown"      # Use markdown-aware chunking for .md files
+    
+    # Parámetros base compartidos.
+    # - fixed_word: se usan como fallback si no defines chunk_size_words/chunk_overlap_words
+    # - recursive y markdown: se usan directamente
+    # - character: se usan como fallback si no defines size/overlap
+    # - semantic: hoy no limitan el chunk semántico de forma directa; sirven como referencia/fallback
+    chunk_size: 1000
+    
+    # Overlap entre chunks.
+    # - fixed_word: fallback si no defines chunk_overlap_words
+    # - recursive y markdown: número de caracteres
+    # - character: fallback si no defines overlap
+    # - semantic: no aplica de forma directa en la implementación actual
+    chunk_overlap: 100
+
+    # Parámetros específicos para fixed_word
+    chunk_size_words: 100      # número de palabras por chunk
+    chunk_overlap_words: 0     # número de palabras repetidas
+    min_words: 5               # evita chunks demasiado pequeños al final
+    strip_whitespace: true     # elimina espacios al inicio y fin
+    normalize_spaces: true     # normaliza espacios múltiples
+
+    # Parámetros específicos para character
+    # Si no se configuran, usa chunk_size/chunk_overlap como fallback.
+    size: 1000                 # tamaño aproximado en caracteres
+    overlap: 100               # número de caracteres repetidos
+    separator: "\n\n"          # separador preferido
+    is_separator_regex: false  # si el separador es una expresión regular
+
+    # Parámetros específicos para recursive
+    separators: ["\n\n", "\n", ". ", " "]  # jerarquía de separadores para cortes naturales
+    keep_separator: true                   # conserva separadores en salida
+    recursive_is_separator_regex: false   # si los separadores son regex
+
+    # Parámetros específicos para markdown
+    # Nota: la implementación actual hace parsing propio por estructura/regex.
+    # markdown_headers se deja declarado para alineación de config y extensibilidad futura.
+    markdown_headers: [["#", "h1"], ["##", "h2"], ["###", "h3"]]  # headers de markdown para segmentación estructural
+
+    # Parámetros específicos para chunking semántico
+    # Ver docs: docs/chunking.md (Chunking Semantic)
+    semantic_threshold_type: "percentile"          # cómo se interpreta el umbral
+    semantic_breakpoint_threshold_amount: 95.0     # valor numérico del umbral
+    semantic_embedding_model:                     # modelo sentence-transformers; vacío usa default interno
+
+    # Compatibilidad hacia atrás para parámetros adicionales no modelados explícitamente.
+    # Evitar usarlo si el parámetro ya existe como campo directo.
+    extra_params: {}
+
+# ============================================================================
+# OPTICAL CHARACTER RECOGNITION (OCR)
+# ============================================================================
+# Configuration for extracting text from images and scanned documents
+ocr:
+  # Provider for OCR services (azure_doc_intelligence, tesseract, etc.)
+  provider: "azure_doc_intelligence"
+  
+  # Azure Document Intelligence (formerly Form Recognizer) endpoint (loaded from Key Vault)
+  endpoint: "${KV-azure-form-recognizer-endpoint}"
+  
+  # API authentication key (loaded from Key Vault)
+  api_key: "${KV-azure-form-recognizer-api-key}"
+  
+  # Model to use for OCR (prebuilt-read is optimized for general text extraction)
+  model_id: "prebuilt-read"
+
+# ============================================================================
+# JSON File Structure
+# ============================================================================
+json_file_structure:
+  # LLM used only when content/metadata fields are unknown
+  llm_key: "gpt4_reasoner"
+
+  # Number of first records sent to LLM for field detection
+  sample_rows_for_llm: 2
+
+  # Known mappings validator:
+  # 1) by_file (exact filename) -> highest priority
+  # 2) by_extension (".json", ".parquet", ".delta")
+  # 3) default
+  mappings:
+    # Mappings for specific files
+    by_file:
+      "historial_siniestros.json": 
+        content_fields: ["descripcion", "detalle_caso"]
+        metadata_fields: ["id", "fecha_evento", "estado"]
+
+    # Mappings for specific extensions
+    by_extension:
+      ".json":
+        content_fields: []
+        metadata_fields: []
+      ".parquet":
+        content_fields: []
+        metadata_fields: []
+      ".delta":
+        content_fields: []
+        metadata_fields: []
+
+    default:
+      content_fields: []
+      metadata_fields: []
+
+# ============================================================================
+# INDEXING WORKFLOW (s00_sharepoint → s00_discovery → …)
+# ============================================================================
+# sharepoint_sync_enabled: si true, el job de indexing ejecuta s00_sharepoint y
+# escribe en bronze/<path_prefix de s00_discovery.raw_documents> antes del discovery.
+# false = solo indexa desde bronze/<path_prefix de s00_discovery.raw_documents> (sin SharePoint).
+# true = indexa desde SharePoint y escribe en bronze/<path_prefix de s00_discovery.raw_documents>.
+indexing:
+  sharepoint_sync_enabled: true
+
+# ============================================================================
+# SHAREPOINT WORKFLOW
+# ============================================================================
+# Mismo patrón que llms/embeddings: referencias ${KV-nombre-secreto} resueltas por
+# src/core/settings.py (secret_helper → Azure Key Vault). Valores en claro no deben
+# commitearse.
+# Si omites los cuatro campos de conexión o no se resuelven, sharepoint_connection
+# puede usar el fallback directo a Key Vault (nombres: sharepoint-site-url, etc.).
+# Parámetros de ejecución (max_folders, only_folder, since_date): sharepoint_manifest.yaml
+# bronze_folder: raíz bajo el filesystem ADLS "bronze" donde se escriben los archivos
+# (ej. "sharepoint/llmops" o solo "FrameworkLLMOps"). null = último segmento de relative_path.
+# skip_sync_if_unchanged: true = solo re-descarga/subida si cambió LastModified en SharePoint
+# (comparado con metadata sp_modified del blob). false = siempre sobrescribe tras descargar.
+sharepoint:
+  enabled: true
+  site_url: "${KV-sharepoint-site-url}" # https://<tu-workspace>.sharepoint.com/sites/FrameworkLLMOps
+  client_id: "${KV-sharepoint-client-id}" 
+  client_secret: "${KV-sharepoint-client-secret}"
+  relative_path: "${KV-sharepoint-relative-path}" # /sites/Framework_LLMOps/Shared Documents
+  bronze_folder: "FrameworkLLMOps" # Nombre de la carpeta en el filesystem ADLS "bronze" donde se escriben los archivos
+  skip_sync_if_unchanged: true
