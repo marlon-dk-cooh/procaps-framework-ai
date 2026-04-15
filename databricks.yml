@@ -1,11 +1,11 @@
 bundle:
   # Nombre lógico del bundle para este workflow asíncrono
-  name: workflow
+  name: procaps-framework-ai
 
 include:
 # Workflows-> resources/
   - resources/indexing_workflow.yml
-  - resources/sharepoint_workflow.yml
+  # - resources/sharepoint_workflow.yml # Not required at the moment.
 
 sync:
   include:
@@ -51,9 +51,9 @@ targets:
     default: true
     workspace:
       # TODO: reemplazar por el host de tu workspace https://<tu-workspace>.azuredatabricks.net/
-      host: https://<tu-workspace>.azuredatabricks.net/ 
+      host: https://adb-7020982738702124.4.azuredatabricks.net/
       # TODO: ruta donde se sincronizará el bundle en el workspace /Users/<tu-usuario>/bundles/workflow-template
-      root_path: /Users/<tu-usuario>/bundles/workflow-template 
+      root_path: /Users/marlon.marin@dataknow.co/bundles/procaps-framework-ai
 
     variables:
       availability: "ON_DEMAND_AZURE"
@@ -92,30 +92,30 @@ targets:
                   business_domain: "${var.business_domain}"
                   instance_type: "ephemeral"
 
-        sharepoint_workflow_job:
-          job_clusters:
-            - job_cluster_key: "cluster_sharepoint"
-              new_cluster:
-                spark_version: "${var.spark_version}"
-                azure_attributes:
-                  first_on_demand: 2
-                  availability: "${var.availability}"
-                  spot_bid_max_price: 100
-                node_type_id: "${var.node_type_id}"
-                driver_node_type_id: "${var.node_type_id}"
-                num_workers: "${var.num_workers}"
-                autotermination_minutes: "${var.autotermination_minutes}"
-                data_security_mode: SINGLE_USER
-                runtime_engine: STANDARD
-                spark_conf:
-                  "spark.databricks.delta.preview.enabled": "true"
-                  "spark.databricks.delta.optimizeWrite.enabled": "true"
-                  "spark.sql.adaptive.enabled": "true"
-                spark_env_vars:
-                  PIP_INDEX_URL: "https://pypi.org/simple"
-                custom_tags:
-                  project: "Framework-IA"
-                  environment: "${bundle.target}"
-                  business_domain: "${var.business_domain}"
-                  instance_type: "ephemeral"
+        # sharepoint_workflow_job:
+        #   job_clusters:
+        #     - job_cluster_key: "cluster_sharepoint"
+        #       new_cluster:
+        #         spark_version: "${var.spark_version}"
+        #         azure_attributes:
+        #           first_on_demand: 2
+        #           availability: "${var.availability}"
+        #           spot_bid_max_price: 100
+        #         node_type_id: "${var.node_type_id}"
+        #         driver_node_type_id: "${var.node_type_id}"
+        #         num_workers: "${var.num_workers}"
+        #         autotermination_minutes: "${var.autotermination_minutes}"
+        #         data_security_mode: SINGLE_USER
+        #         runtime_engine: STANDARD
+        #         spark_conf:
+        #           "spark.databricks.delta.preview.enabled": "true"
+        #           "spark.databricks.delta.optimizeWrite.enabled": "true"
+        #           "spark.sql.adaptive.enabled": "true"
+        #         spark_env_vars:
+        #           PIP_INDEX_URL: "https://pypi.org/simple"
+        #         custom_tags:
+        #           project: "Framework-IA"
+        #           environment: "${bundle.target}"
+        #           business_domain: "${var.business_domain}"
+        #           instance_type: "ephemeral"
 

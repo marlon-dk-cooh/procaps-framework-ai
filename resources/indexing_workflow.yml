@@ -19,43 +19,43 @@ resources:
         enabled: true
 
       tasks:
-        # ==================== TASK 0a: SHAREPOINT → BRONZE (indexing prefix) ====================
-        - task_key: s00_sharepoint
-          description: "SharePoint → ADLS Bronze (mismo prefijo que discovery); no-op si indexing.sharepoint_sync_enabled es false"
-          job_cluster_key: "cluster_dedicado"
+        # # ==================== TASK 0a: SHAREPOINT → BRONZE (indexing prefix) ====================
+        # - task_key: s00_sharepoint
+        #   description: "SharePoint → ADLS Bronze (mismo prefijo que discovery); no-op si indexing.sharepoint_sync_enabled es false"
+        #   job_cluster_key: "cluster_dedicado"
 
-          spark_python_task:
-            python_file: "../src/steps/indexing/s00_sharepoint.py"
-            parameters:
-              - "--config"
-              - "${workspace.file_path}/config/config.yaml"
-              - "--manifest"
-              - "${workspace.file_path}/config/indexing_manifest.yaml"
-              - "--run_id"
-              - "{{job.run_id}}"
-              - "--task_run_id"
-              - "{{task.run_id}}"
+        #   spark_python_task:
+        #     python_file: "../src/steps/indexing/s00_sharepoint.py"
+        #     parameters:
+        #       - "--config"
+        #       - "${workspace.file_path}/config/config.yaml"
+        #       - "--manifest"
+        #       - "${workspace.file_path}/config/indexing_manifest.yaml"
+        #       - "--run_id"
+        #       - "{{job.run_id}}"
+        #       - "--task_run_id"
+        #       - "{{task.run_id}}"
 
-          libraries:
-            - pypi:
-                package: "PyYAML>=6.0"
-            - pypi:
-                package: "azure-identity>=1.15.0"
-            - pypi:
-                package: "azure-keyvault-secrets>=4.7.0"
-            - pypi:
-                package: "azure-storage-file-datalake>=12.14.0"
-            - pypi:
-                package: "Office365-REST-Python-Client>=2.5.0"
+        #   libraries:
+        #     - pypi:
+        #         package: "PyYAML>=6.0"
+        #     - pypi:
+        #         package: "azure-identity>=1.15.0"
+        #     - pypi:
+        #         package: "azure-keyvault-secrets>=4.7.0"
+        #     - pypi:
+        #         package: "azure-storage-file-datalake>=12.14.0"
+        #     - pypi:
+        #         package: "Office365-REST-Python-Client>=2.5.0"
 
-          timeout_seconds: 1800
-          max_retries: 1
-          retry_on_timeout: true
+        #   timeout_seconds: 1800
+        #   max_retries: 1
+        #   retry_on_timeout: true
 
         # ==================== TASK 0b: DISCOVERY ====================
         - task_key: s00_discovery
-          depends_on:
-            - task_key: s00_sharepoint
+          # depends_on:
+          #   - task_key: s00_sharepoint
 
           description: "Descubrimiento y organización de archivos"
           job_cluster_key: "cluster_dedicado"

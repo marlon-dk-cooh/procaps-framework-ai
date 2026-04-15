@@ -16,3 +16,4 @@ __pycache__/
 src/steps/indexing/__pycache__/*
 push_secrets_to_kv.sh
 .env
+.codex

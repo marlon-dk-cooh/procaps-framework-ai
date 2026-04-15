@@ -5,15 +5,16 @@ workflow:
   schema: "rag_index"
 
   steps:
-    # s00_sharepoint: mismos criterios que sharepoint_workflow / sharepoint_manifest (ver docs/configuration.md).
-    # null = no aplicar ese filtro (equivale a omitir la clave).
-    s00_sharepoint:
-      options:
-        max_folders: null # entero > 0: tope de carpetas a recorrer; null = sin límite
-        # Solo esa subcarpeta bajo sharepoint.relative_path; en Bronze no se añade un nivel con ese nombre (contenido bajo destino como si fuera la raíz). null = todas.
-        only_folder: null  # ej. "arqui"
-        # Solo ISO 8601 (fromisoformat). Ej.: "2026-04-10T15:47:00"; no usar "4/10/2026 03:47 PM".
-        since_date: null # Ej.: "2026-04-10T15:47:00"
+    # Commented -> No es necesario definir un paso específico para la ingesta desde SharePoint, porque el contrato de s00_discovery es suficientemente genérico para adaptarse a esa fuente (y a otras futuras). En su lugar, el código de s00_discovery se encargará de leer los secretos necesarios para conectarse a SharePoint y aplicar los filtros correspondientes (ver comentarios en indexing_workflow.yml).
+    # # s00_sharepoint: mismos criterios que sharepoint_workflow / sharepoint_manifest (ver docs/configuration.md).
+    # # null = no aplicar ese filtro (equivale a omitir la clave).
+    # s00_sharepoint:
+    #   options:
+    #     max_folders: null # entero > 0: tope de carpetas a recorrer; null = sin límite
+    #     # Solo esa subcarpeta bajo sharepoint.relative_path; en Bronze no se añade un nivel con ese nombre (contenido bajo destino como si fuera la raíz). null = todas.
+    #     only_folder: null  # ej. "arqui"
+    #     # Solo ISO 8601 (fromisoformat). Ej.: "2026-04-10T15:47:00"; no usar "4/10/2026 03:47 PM".
+    #     since_date: null # Ej.: "2026-04-10T15:47:00"
 
     s00_discovery:
       inputs:
