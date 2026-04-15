@@ -19,6 +19,14 @@ from .logging_config import get_logger
 logger = get_logger(__name__)
 
 try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    DOTENV_AVAILABLE = True
+except ImportError:
+    DOTENV_AVAILABLE = False
+
+try:
     from azure.identity import DefaultAzureCredential, get_bearer_token_provider
     from azure.keyvault.secrets import SecretClient
 
@@ -35,21 +43,48 @@ _secret_client = None
 # Default Key Vault URL - can be overridden via environment variable
 DEFAULT_KEY_VAULT_URL = "https://azkvaprocapsdevservicios.vault.azure.net/"
 
+
+def _env_or_default(env_name: str, default: str = "") -> str:
+    """Resolve fallback values from environment first, then use a hardcoded default."""
+    return os.getenv(env_name, default)
+
+
+def _search_index_env_value(default: str = "") -> str:
+    return (
+        os.getenv("AZURE_SEARCH_INDEX")
+        or os.getenv("AZURE_SEARCH_INDEX_NAME")
+        or os.getenv("AZURE_SEARCH_INDEX_SEMANTIC")
+        or default
+    )
+
+
 # Known configurations to bypass Key Vault if offline or permission denied
 KNOWN_CONFIGS = {
-    "azure-blob-storage-name": "stllmopsdll",
-    "azure-openai-endpoint": "https://foundry-ia-llmops-dll.openai.azure.com/",
+    "azure-blob-storage-name": _env_or_default("AZURE_STORAGE_ACCOUNT_NAME", "stllmopsdll"),
+    "azure-openai-endpoint": _env_or_default(
+        "AZURE_OPENAI_ENDPOINT", "https://foundry-ia-llmops-dll.openai.azure.com/"
+    ),
     # Empty keys force token-based (managed identity) auth in clients.
-    "azure-openai-api-key": "",
-    "azure-form-recognizer-endpoint": "https://di-ia-llmops-dll.cognitiveservices.azure.com/",
-    "azure-form-recognizer-api-key": "",
-    "openai-api-version": "2024-08-01-preview",
-    "KV-AZSEARCH-Endpoint": "https://srch-llmops-dll.search.windows.net",
-    "KV-AZSEARCH-Key": "",
-    "KV-AZSEARCH-index": "rag-knowledge-base",
-    "model-llm-name": "gpt-4o",
-    "model-embeddings-name": "text-embedding-3-large",
-    "search-index-name": "rag-knowledge-base",
+    "azure-openai-api-key": _env_or_default("AZURE_OPENAI_KEY", ""),
+    "azure-form-recognizer-endpoint": _env_or_default(
+        "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT",
+        "https://di-ia-llmops-dll.cognitiveservices.azure.com/",
+    ),
+    "azure-form-recognizer-api-key": _env_or_default(
+        "AZURE_DOCUMENT_INTELLIGENCE_KEY", ""
+    ),
+    "openai-api-version": _env_or_default("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+    "KV-AZSEARCH-Endpoint": _env_or_default(
+        "AZURE_SEARCH_ENDPOINT", "https://srch-llmops-dll.search.windows.net"
+    ),
+    "KV-AZSEARCH-Key": _env_or_default("AZURE_SEARCH_KEY", ""),
+    "KV-AZSEARCH-index": _search_index_env_value("rag-knowledge-base"),
+    "model-llm-name": _env_or_default("AZURE_OPENAI_MODEL", "gpt-4o"),
+    "model-embeddings-name": os.getenv(
+        "AZURE_OPENAI_EMBEDDINGS_MODEL",
+        os.getenv("AZURE_OPENAI_MODEL", "text-embedding-3-large"),
+    ),
+    "search-index-name": _search_index_env_value("rag-knowledge-base"),
 }
 
 
