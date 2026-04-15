@@ -33,7 +33,7 @@ _credential = None
 _secret_client = None
 
 # Default Key Vault URL - can be overridden via environment variable
-DEFAULT_KEY_VAULT_URL = "https://kv-llmops-dll.vault.azure.net/"
+DEFAULT_KEY_VAULT_URL = "https://azkvaprocapsdevservicios.vault.azure.net/"
 
 # Known configurations to bypass Key Vault if offline or permission denied
 KNOWN_CONFIGS = {
@@ -138,14 +138,20 @@ def get_secret(secret_name: str, vault_url: Optional[str] = None) -> str:
     """
     Get a secret from Key Vault using Managed Identity.
     """
-    if secret_name in KNOWN_CONFIGS:
-        logger.info(f"ℹ️ using known config for: {secret_name}")
-        return KNOWN_CONFIGS[secret_name]
-
-    client = get_secret_client(vault_url)
-    secret = client.get_secret(secret_name)
-    logger.info(f"🔑 Retrieved secret: {secret_name}")
-    return secret.value
+    try:
+        client = get_secret_client(vault_url)
+        secret = client.get_secret(secret_name)
+        logger.info(f"🔑 Retrieved secret: {secret_name}")
+        return secret.value
+    except Exception as e:
+        if secret_name in KNOWN_CONFIGS:
+            logger.warning(
+                "Falling back to KNOWN_CONFIGS for %s after Key Vault lookup failed: %s",
+                secret_name,
+                e,
+            )
+            return KNOWN_CONFIGS[secret_name]
+        raise
 
 
 def get_openai_token_provider():

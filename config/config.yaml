@@ -280,26 +280,27 @@ json_file_structure:
 # false = solo indexa desde bronze/<path_prefix de s00_discovery.raw_documents> (sin SharePoint).
 # true = indexa desde SharePoint y escribe en bronze/<path_prefix de s00_discovery.raw_documents>.
 indexing:
-  sharepoint_sync_enabled: true
+  sharepoint_sync_enabled: false
 
-# ============================================================================
-# SHAREPOINT WORKFLOW
-# ============================================================================
-# Mismo patrón que llms/embeddings: referencias ${KV-nombre-secreto} resueltas por
-# src/core/settings.py (secret_helper → Azure Key Vault). Valores en claro no deben
-# commitearse.
-# Si omites los cuatro campos de conexión o no se resuelven, sharepoint_connection
-# puede usar el fallback directo a Key Vault (nombres: sharepoint-site-url, etc.).
-# Parámetros de ejecución (max_folders, only_folder, since_date): sharepoint_manifest.yaml
-# bronze_folder: raíz bajo el filesystem ADLS "bronze" donde se escriben los archivos
-# (ej. "sharepoint/llmops" o solo "FrameworkLLMOps"). null = último segmento de relative_path.
-# skip_sync_if_unchanged: true = solo re-descarga/subida si cambió LastModified en SharePoint
-# (comparado con metadata sp_modified del blob). false = siempre sobrescribe tras descargar.
-sharepoint:
-  enabled: true
-  site_url: "${KV-sharepoint-site-url}" # https://<tu-workspace>.sharepoint.com/sites/FrameworkLLMOps
-  client_id: "${KV-sharepoint-client-id}" 
-  client_secret: "${KV-sharepoint-client-secret}"
-  relative_path: "${KV-sharepoint-relative-path}" # /sites/Framework_LLMOps/Shared Documents
-  bronze_folder: "FrameworkLLMOps" # Nombre de la carpeta en el filesystem ADLS "bronze" donde se escriben los archivos
-  skip_sync_if_unchanged: true
+# Sharepoint is skipped at this moment.
+# # ============================================================================
+# # SHAREPOINT WORKFLOW
+# # ============================================================================
+# # Mismo patrón que llms/embeddings: referencias ${KV-nombre-secreto} resueltas por
+# # src/core/settings.py (secret_helper → Azure Key Vault). Valores en claro no deben
+# # commitearse.
+# # Si omites los cuatro campos de conexión o no se resuelven, sharepoint_connection
+# # puede usar el fallback directo a Key Vault (nombres: sharepoint-site-url, etc.).
+# # Parámetros de ejecución (max_folders, only_folder, since_date): sharepoint_manifest.yaml
+# # bronze_folder: raíz bajo el filesystem ADLS "bronze" donde se escriben los archivos
+# # (ej. "sharepoint/llmops" o solo "FrameworkLLMOps"). null = último segmento de relative_path.
+# # skip_sync_if_unchanged: true = solo re-descarga/subida si cambió LastModified en SharePoint
+# # (comparado con metadata sp_modified del blob). false = siempre sobrescribe tras descargar.
+# sharepoint:
+#   enabled: true
+#   site_url: "${KV-sharepoint-site-url}" # https://<tu-workspace>.sharepoint.com/sites/FrameworkLLMOps
+#   client_id: "${KV-sharepoint-client-id}" 
+#   client_secret: "${KV-sharepoint-client-secret}"
+#   relative_path: "${KV-sharepoint-relative-path}" # /sites/Framework_LLMOps/Shared Documents
+#   bronze_folder: "FrameworkLLMOps" # Nombre de la carpeta en el filesystem ADLS "bronze" donde se escriben los archivos
+#   skip_sync_if_unchanged: true
