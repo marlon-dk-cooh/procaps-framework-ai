@@ -45,6 +45,11 @@ from src.core.medallion_paths import INDEXING_STEPS_ROOT
 
 logger = get_logger(__name__)
 
+try:
+    from azure.core.exceptions import ResourceNotFoundError
+except ImportError:  # pragma: no cover - optional until runtime deps are present
+    ResourceNotFoundError = None  # type: ignore
+
 FILE_GROUPS = {
     "textual": [".pdf", ".docx", ".txt", ".pptx"],
     "tabular": [".csv", ".xlsx", ".xls"],
@@ -170,65 +175,82 @@ def _process_internal(step_ctx: StepContext, sl):
     scope_msg = f" under '{path_prefix.rstrip('/')}/'" if path_prefix else ""
     logger.info(f"Scanning for files in the ADLS 'bronze' container{scope_msg}...")
 
-    # Scan via ADLS recursive get_paths (optionally scoped by path_prefix from manifest)
-    paths = uploader.container_client.get_paths(path=path_prefix, recursive=True)
-
     input_cnt = 0
-    for path_item in paths:
-        if path_item.is_directory:
-            continue
+    try:
+        # Scan via ADLS recursive get_paths (optionally scoped by path_prefix from manifest)
+        paths = uploader.container_client.get_paths(path=path_prefix, recursive=True)
 
-        input_cnt += 1
-        file_path = path_item.name
+        for path_item in paths:
+            if path_item.is_directory:
+                continue
 
-        # Skip pipeline output directories if they reside in the same container
-        if file_path.startswith(ignore_prefixes):
-            stats["skipped_pipeline_artifact"] += 1
-            # Do not record as error, just skipped
-            continue
+            input_cnt += 1
+            file_path = path_item.name
 
-        filename = os.path.basename(file_path)
-        group, ext = classify_extension(filename)
+            # Skip pipeline output directories if they reside in the same container
+            if file_path.startswith(ignore_prefixes):
+                stats["skipped_pipeline_artifact"] += 1
+                # Do not record as error, just skipped
+                continue
 
-        if group == "unknown":
-            stats["skipped_unknown"] += 1
-            sl.record_error(filename, "Unknown file extension ignored")
-            continue
+            filename = os.path.basename(file_path)
+            group, ext = classify_extension(filename)
 
-        file_size = int(getattr(path_item, "content_length", 0) or 0)
-        staged_path = ""
-        try:
-            staged_path = _copy_file_to_silver_staging(
-                uploader=uploader,
-                silver_client=silver_client,
-                source_path=file_path,
-                group=group,
-                ext=ext,
-                filename=filename,
+            if group == "unknown":
+                stats["skipped_unknown"] += 1
+                sl.record_error(filename, "Unknown file extension ignored")
+                continue
+
+            file_size = int(getattr(path_item, "content_length", 0) or 0)
+            staged_path = ""
+            try:
+                staged_path = _copy_file_to_silver_staging(
+                    uploader=uploader,
+                    silver_client=silver_client,
+                    source_path=file_path,
+                    group=group,
+                    ext=ext,
+                    filename=filename,
+                )
+                stats["staged_copied"] += 1
+            except Exception as copy_err:
+                logger.error("Failed staging copy for %s: %s", file_path, copy_err)
+                sl.record_error(filename, f"Staging copy failed: {copy_err}")
+                stats["staged_failed"] += 1
+                # Skip file from manifest if we can't stage it.
+                continue
+
+            discovered_files.append(
+                {
+                    "file_path": file_path,
+                    "staged_path": staged_path,
+                    "filename": filename,
+                    "group": group,
+                    "extension": ext,
+                    "size_bytes": file_size,
+                    "discovered_at": current_colombian_time().isoformat(),
+                }
             )
-            stats["staged_copied"] += 1
-        except Exception as copy_err:
-            logger.error("Failed staging copy for %s: %s", file_path, copy_err)
-            sl.record_error(filename, f"Staging copy failed: {copy_err}")
-            stats["staged_failed"] += 1
-            # Skip file from manifest if we can't stage it.
-            continue
 
-        discovered_files.append(
-            {
-                "file_path": file_path,
-                "staged_path": staged_path,
-                "filename": filename,
-                "group": group,
-                "extension": ext,
-                "size_bytes": file_size,
-                "discovered_at": current_colombian_time().isoformat(),
-            }
+            stats[f"discovered_{group}"] += 1
+            stats["total_size_bytes"] += file_size
+            sl.record_file(filename, "success", group=group)
+    except Exception as e:
+        is_missing_prefix = ResourceNotFoundError is not None and isinstance(
+            e, ResourceNotFoundError
         )
-
-        stats[f"discovered_{group}"] += 1
-        stats["total_size_bytes"] += file_size
-        sl.record_file(filename, "success", group=group)
+        if is_missing_prefix and path_prefix:
+            logger.warning(
+                "Discovery input prefix '%s' does not exist in bronze. "
+                "Continuing with zero discovered files.",
+                path_prefix,
+            )
+            sl.record_error(
+                path_prefix.rstrip("/"),
+                "Configured discovery path_prefix does not exist in bronze container",
+            )
+        else:
+            raise
 
     sl.set_input_count(input_cnt)
     sl.set_output_count(len(discovered_files))

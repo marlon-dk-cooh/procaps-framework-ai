@@ -89,10 +89,36 @@ class MedallionUploader:
                     account_url=account_url, credential=credential
                 )
             else:
-                from .secret_helper import get_credential
+                from .secret_helper import (
+                    SecretNames,
+                    get_credential,
+                    get_secret,
+                )
+
+                resolved_credential = None
+                try:
+                    storage_key = (get_secret(SecretNames.ADLS_STORAGE_KEY) or "").strip()
+                    if storage_key:
+                        resolved_credential = storage_key
+                        logger.info(
+                            "Using ADLS storage account key from secret store for account %s.",
+                            account_name,
+                        )
+                except Exception as storage_key_error:
+                    logger.warning(
+                        "Could not retrieve ADLS storage key from secret store: %s. "
+                        "Falling back to credential-based authentication.",
+                        storage_key_error,
+                    )
+
+                if resolved_credential is None:
+                    resolved_credential = get_credential()
+                    logger.info(
+                        "Using Azure credential flow for ADLS account %s.", account_name
+                    )
 
                 self.service_client = DataLakeServiceClient(
-                    account_url=account_url, credential=get_credential()
+                    account_url=account_url, credential=resolved_credential
                 )
 
             self.container_client = self.service_client.get_file_system_client(
